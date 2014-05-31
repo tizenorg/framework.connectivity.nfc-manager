@@ -1,0 +1,42 @@
+Source: nfc-manager
+Section: libs
+Priority: extra
+Maintainer: Sangsoo Lee <constant.lee@samsung.com>, Sungjae Lim <sungjae.lim@samsung.com>, Sechang Sohn <sc.sohn@samsung.com>
+Build-Depends: debhelper (>= 5), libaul-1-dev, libglib2.0-dev, libvconf-dev, libsecurity-server-client-dev, libbluetooth-frwk-dev,libdbus-glib-1-dev, dlog-dev, libecore-dev, libslp-tapi-dev, libappsvc-dev, libcurl-dev, libheynoti-dev, libsvi-dev, libssl-dev, smartcard-service-dev, smartcard-service-common-dev, libslp-pm-dev
+Standards-Version: 0.0.1
+
+Package: libnfc-common-lib-0
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: NFC Common Library
+
+Package: libnfc-common-lib-dev
+Section: libs
+Architecture: any
+Depends: ${misc:Depends}, libnfc-common-lib-0 (= ${Source-Version})
+Description: NFC Common Library
+
+Package: libnfc-common-lib-dbg
+Section: debug
+Architecture: any
+Depends: ${misc:Depends}, libnfc-common-lib-0 (= ${Source-Version})
+Description: NFC Common Library (unstripped)
+
+Package: libnfc-manager-0
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libnfc-common-lib-0 (= ${Source-Version})
+Description: NFC freamework
+
+Package: libnfc-manager-dev
+Section: libs
+Architecture: any
+Depends: ${misc:Depends}, libnfc-manager-0 (= ${Source-Version})
+Description: NFC freamework
+
+Package: libnfc-manager-dbg
+Section: debug
+Architecture: any
+Depends: ${misc:Depends}, libnfc-manager-0 (= ${Source-Version})
+Description: NFC-manager (unstripped)

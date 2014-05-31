@@ -1,0 +1,12 @@
+/testcase/utc_net_nfc_client_data
+/testcase/utc_net_nfc_client_exchanger
+/testcase/utc_net_nfc_client_internal_se
+/testcase/utc_net_nfc_client_ndef_message
+/testcase/utc_net_nfc_client_ndef_record
+/testcase/utc_net_nfc_client_nfc
+/testcase/utc_net_nfc_client_tag
+/testcase/utc_net_nfc_client_tag_felica
+/testcase/utc_net_nfc_client_tag_jewel
+/testcase/utc_net_nfc_client_tag_mifare
+/testcase/utc_net_nfc_client_target_info
+

@@ -1,0 +1,31 @@
+<manifest>
+	<define>
+		<domain name="nfc-manager" />
+		<provide>
+			<label name="nfc-manager::tag" />
+			<label name="nfc-manager::p2p" />
+			<label name="nfc-manager::admin" />
+			<label name="nfc-manager::card_emul" />
+			<label name="nfc-manager::common" />
+		</provide>
+		<request>
+			<smack request="sys-assert::core" type="rwxat" />
+		</request>
+	</define>
+	<assign>
+		<filesystem path="/usr/bin/nfc-manager-daemon" exec_label="nfc-manager" />
+		<filesystem path="/etc/init.d/libnfc-manager-0" label="_" exec_label="none" />
+		<filesystem path="/etc/rc.d/rc3.d/S81libnfc-manager-0" label="_" exec_label="none" />
+		<filesystem path="/etc/rc.d/rc5.d/S81libnfc-manager-0" label="_" exec_label="none" />
+		<filesystem path="/usr/bin/ndef-tool" exec_label="nfc-manager" />
+		<filesystem path="/usr/share/dbus-1/services/org.tizen.nfc_service.service" label="_"/>
+		<filesystem path="/usr/lib/systemd/system/nfc-manager.service" label="_" exec_label="none" />
+		<filesystem path="/usr/lib/systemd/system/multi-user.target.wants/nfc-manager.service" label="_" exec_label="none" />
+		<filesystem path="/usr/lib/libnfc.so.1.0.0" label="_" />
+		<filesystem path="/usr/lib/libnfc.so.1" label="_" />
+	</assign>
+	<request>
+		<domain name="nfc-manager" />
+	</request>
+</manifest>
+

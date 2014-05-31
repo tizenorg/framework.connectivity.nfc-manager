@@ -1,0 +1,13 @@
+# Package Information for pkg-config
+
+prefix=/usr
+exec_prefix=/usr/bin
+libdir=/usr/lib
+includedir=/usr/include/nfc-common-lib
+
+Name: nfc-common-lib
+Description: NFC Common Library
+Version: 1.0
+Requires: 
+Libs: -L/usr/lib -lnfc-common-lib
+Cflags: -I/usr/include/nfc-common-lib

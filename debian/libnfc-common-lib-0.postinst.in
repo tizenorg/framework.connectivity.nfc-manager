@@ -1,0 +1,8 @@
+#!/bin/sh
+#Add boot sequence script
+if [ ${USER} == "root" ]
+then
+vconftool set -t bool memory/private/nfc-manager/popup_disabled 0 -u 5000
+else
+vconftool set -t bool memory/private/nfc-manager/popup_disabled 0
+fi

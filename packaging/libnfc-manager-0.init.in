@@ -1,0 +1,31 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          nfc-manager-daemon
+# Required-Start:
+# Required-Stop:
+# Default-Start:     3 5
+# Default-Stop:      0
+# Short-Description: NFC manager
+# Description:       NFC manager
+#
+#
+### END INIT INFO
+
+# Author: Wonkyu Kwon <wonkyu.kwon@samsung.com>
+
+# PATH should only include /usr/* if it runs after the mountnfs.sh script
+DAEMON=/usr/bin/nfc-manager-daemon
+DAEMON_ARGS="script"             # Arguments to run the daemon with
+VCONFTOOL=/usr/bin/vconftool
+                                      
+# Exit if the package is not installed
+[ -x $DAEMON ] || exit 0                                                  
+[ -x $VCONFTOOL ] || exit 0                                               
+                                                                          
+#if vconftool get db/nfc/enable | grep -q "db/nfc/enable, value = 1 (bool)"
+#then
+	if ! ps -f --ppid 1 | grep -q nfc-manager-daemon
+	then
+		$DAEMON $DAEMON_ARGS &
+	fi
+#fi

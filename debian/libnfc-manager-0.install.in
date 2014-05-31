@@ -1,0 +1,5 @@
+@PREFIX@/lib/libnfc.so.*
+@PREFIX@/bin/*
+/etc/init.d/*
+/etc/rc.d/*
+

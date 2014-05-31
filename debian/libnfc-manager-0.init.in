@@ -1,0 +1,23 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          nfc-agent
+# Required-Start:    
+# Required-Stop:
+# Default-Start:     3 5
+# Default-Stop:      0
+# Short-Description: NFC agent
+# Description:       NFC agent
+#                    
+#                    
+### END INIT INFO
+
+# Author: Wonkyu Kwon <wonkyu.kwon@samsung.com>
+
+# PATH should only include /usr/* if it runs after the mountnfs.sh script
+DAEMON=/usr/bin/nfc-manager-daemon
+DAEMON_ARGS=""             # Arguments to run the daemon with
+
+# Exit if the package is not installed
+[ -x $DAEMON ] || exit 0
+
+$DAEMON $DAEMON_ARGS &

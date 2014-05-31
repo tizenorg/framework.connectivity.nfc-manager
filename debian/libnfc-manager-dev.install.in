@@ -1,0 +1,3 @@
+@PREFIX@/lib/pkgconfig/nfc.pc
+@PREFIX@/include/nfc/*
+@PREFIX@/lib/libnfc.so

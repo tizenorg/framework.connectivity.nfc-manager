@@ -1,0 +1,10 @@
+[Unit]
+Description=NFC manager
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/nfc-manager-daemon
+KillSignal=SIGKILL
+
+[Install]
+WantedBy=multi-user.target

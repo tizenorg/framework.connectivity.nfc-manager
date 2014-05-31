@@ -1,0 +1,12 @@
+#!/bin/sh
+#Add boot sequence script
+if [ ${USER} == "root" ]
+then
+vconftool set -t bool db/nfc/feature 0 -u 5000
+vconftool set -t bool db/nfc/enable 0 -u 5000
+vconftool set -t bool db/nfc/sbeam 0 -u 5000
+else
+vconftool set -t bool db/nfc/feature 0
+vconftool set -t bool db/nfc/enable 0
+vconftool set -t bool db/nfc/sbeam 0
+fi
