@@ -1,4 +1,0 @@
-[D-BUS Service]
-Name=org.tizen.nfc_service
-Exec=/usr/bin/nfc-manager-daemon
-User=root

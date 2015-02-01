@@ -32,8 +32,12 @@ enum
 	OPERATION_WRITE_TAG,
 	OPERATION_RECEIVE_NDEF,
 	OPERATION_SEND_NDEF,
+	OPERATION_HANDOVER,
+	OPERATION_SEND_APDU,
+	OPERATION_GET_ATR,
 	OPERATION_ON, /* hidden operation */
 	OPERATION_OFF, /* hidden operation */
+	OPERATION_SET_SE, /* hidden operation */
 };
 
 int ndef_tool_read_ndef_message_from_file(const char *file_name, ndef_message_h *msg);
@@ -42,6 +46,7 @@ int ndef_tool_write_ndef_message_to_file(const char *file_name, ndef_message_h m
 void ndef_tool_display_ndef_message_from_file(const char *file_name);
 void ndef_tool_display_discovered_tag(net_nfc_target_info_h target);
 void ndef_tool_display_discovered_target(net_nfc_target_handle_h handle);
+void ndef_tool_display_buffer(const char *title, uint8_t *buffer, uint32_t length);
 
 bool ndef_tool_sign_message_from_file(const char *file_name, int begin_index, int end_index, char *cert_file, char *password);
 bool ndef_tool_verify_message_from_file(const char *file_name);
@@ -50,6 +55,9 @@ int ndef_tool_read_ndef_from_tag(const char *file);
 int ndef_tool_write_ndef_to_tag(const char *file);
 int ndef_tool_receive_ndef_via_p2p(const char *file);
 int ndef_tool_send_ndef_via_p2p(const char *file);
+int ndef_tool_connection_handover(const char *file);
+int ndef_tool_send_apdu(const char *apdu);
+int ndef_tool_get_atr();
 
 
 

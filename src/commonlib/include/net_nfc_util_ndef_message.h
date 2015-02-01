@@ -1,24 +1,23 @@
 /*
-  * Copyright (c) 2012, 2013 Samsung Electronics Co., Ltd.
-  *
-  * Licensed under the Flora License, Version 1.1 (the "License");
-  * you may not use this file except in compliance with the License.
-  * You may obtain a copy of the License at
+ * Copyright (c) 2012, 2013 Samsung Electronics Co., Ltd.
+ *
+ * Licensed under the Flora License, Version 1.1 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://floralicense.org/license/
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-  *     http://floralicense.org/license/
-  *
-  * Unless required by applicable law or agreed to in writing, software
-  * distributed under the License is distributed on an "AS IS" BASIS,
-  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  * See the License for the specific language governing permissions and
-  * limitations under the License.
-  */
+#ifndef __NET_NFC_UTIL_NDEF_MESSAGE_H__
+#define __NET_NFC_UTIL_NDEF_MESSAGE_H__
 
-
-#ifndef __NET_NFC_UTIL_NDEF_MESSAGE__
-#define __NET_NFC_UTIL_NDEF_MESSAGE__
-
-#include "net_nfc_typedef_private.h"
+#include "net_nfc_typedef_internal.h"
 
 /**
  * \brief These are the flags specifying the content, structure or purpose of a NDEF Record.
@@ -40,15 +39,17 @@
  * NDEF Record #defines for constant value
  */
 
-#define NET_NFC_NDEF_TNF_EMPTY        		0x00  /**< Empty Record, no type, ID or payload present. */
-#define NET_NFC_NDEF_TNF_NFCWELLKNOWN 	0x01  /**< NFC well-known type (RTD). */
-#define NET_NFC_NDEF_TNF_MEDIATYPE    		0x02  /**< Media Type. */
-#define NET_NFC_NDEF_TNF_ABSURI      			0x03  /**< Absolute URI. */
-#define NET_NFC_NDEF_TNF_NFCEXT      			0x04  /**< Nfc External Type (following the RTD format). */
-#define NET_NFC_NDEF_TNF_UNKNOWN      		0x05  /**< Unknown type; Contains no Type information. */
-#define NET_NFC_NDEF_TNF_UNCHANGED   		0x06  /**< Unchanged: Used for Chunked Records. */
-#define NET_NFC_NDEF_TNF_RESERVED     		0x07  /**< RFU, must not be used. */
+#define NET_NFC_NDEF_TNF_EMPTY			0x00	/**< Empty Record, no type, ID or payload present. */
+#define NET_NFC_NDEF_TNF_NFCWELLKNOWN		0x01	/**< NFC well-known type (RTD). */
+#define NET_NFC_NDEF_TNF_MEDIATYPE		0x02	/**< Media Type. */
+#define NET_NFC_NDEF_TNF_ABSURI			0x03	/**< Absolute URI. */
+#define NET_NFC_NDEF_TNF_NFCEXT			0x04	/**< Nfc External Type (following the RTD format). */
+#define NET_NFC_NDEF_TNF_UNKNOWN		0x05	/**< Unknown type; Contains no Type information. */
+#define NET_NFC_NDEF_TNF_UNCHANGED		0x06	/**< Unchanged: Used for Chunked Records. */
+#define NET_NFC_NDEF_TNF_RESERVED		0x07	/**< RFU, must not be used. */
 
+typedef void (*net_nfc_foreach_ndef_records_cb)(ndef_record_s *record,
+	void *user_data);
 /*
  convert rawdata into ndef message structure
  */
@@ -91,5 +92,9 @@ net_nfc_error_e net_nfc_util_remove_record_by_index(ndef_message_s *ndef_message
 
 net_nfc_error_e net_nfc_util_search_record_by_id(ndef_message_s *ndef_message, data_s *id, ndef_record_s **record);
 
-#endif
+void net_nfc_util_foreach_ndef_records(ndef_message_s *msg,
+	net_nfc_foreach_ndef_records_cb func, void *user_data);
 
+net_nfc_error_e net_nfc_util_check_ndef_message_rawdata(data_s *rawdata);
+
+#endif //__NET_NFC_UTIL_NDEF_MESSAGE_H__

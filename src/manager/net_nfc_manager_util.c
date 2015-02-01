@@ -18,22 +18,13 @@
 #include <string.h>
 
 #include "vconf.h"
-#include "svi.h"
+#include "feedback.h"
 #include "wav_player.h"
+#include <mm_sound_private.h>
 
-#include "net_nfc_debug_private.h"
-#include "net_nfc_util_private.h"
-#include "net_nfc_manager_util_private.h"
-
-static void _play_sound_callback(int id, void *data)
-{
-	DEBUG_MSG("_play_sound_callback");
-
-	if (WAV_PLAYER_ERROR_NONE != wav_player_stop(id))
-	{
-		DEBUG_MSG("wav_player_stop failed");
-	}
-}
+#include "net_nfc_debug_internal.h"
+#include "net_nfc_util_internal.h"
+#include "net_nfc_manager_util_internal.h"
 
 void net_nfc_manager_util_play_sound(net_nfc_sound_type_e sound_type)
 {
@@ -60,18 +51,16 @@ void net_nfc_manager_util_play_sound(net_nfc_sound_type_e sound_type)
 
 	if (bVibrationOn)
 	{
-		int svi_handle = -1;
-
 		DEBUG_MSG("Play Vibration");
 
-		if (SVI_SUCCESS == svi_init(&svi_handle))
+		if (FEEDBACK_ERROR_NONE == feedback_initialize())
 		{
-			if (SVI_SUCCESS == svi_play_vib(svi_handle, SVI_VIB_TOUCH_SIP))
+			if (FEEDBACK_ERROR_NONE ==  feedback_play_type(FEEDBACK_TYPE_VIBRATION, FEEDBACK_PATTERN_SIP))
 			{
-				DEBUG_MSG("svi_play_vib success");
+				DEBUG_MSG("feedback_play_type success");
 			}
 
-			svi_fini(svi_handle);
+			feedback_deinitialize();
 		}
 	}
 
@@ -96,7 +85,9 @@ void net_nfc_manager_util_play_sound(net_nfc_sound_type_e sound_type)
 
 		if (sound_path != NULL)
 		{
-			if (WAV_PLAYER_ERROR_NONE == wav_player_start(sound_path, SOUND_TYPE_MEDIA, _play_sound_callback, NULL, NULL))
+			sound_manager_set_session_type(SOUND_SESSION_TYPE_NOTIFICATION);
+			if (MM_ERROR_NONE  == wav_player_start(sound_path, SOUND_TYPE_NOTIFICATION, NULL, NULL, NULL))
+//			if (MM_ERROR_NONE  == mm_sound_play_keysound(sound_path, VOLUME_TYPE_NOTIFICATION))
 			{
 				DEBUG_MSG("wav_player_start success");
 			}
@@ -109,4 +100,3 @@ void net_nfc_manager_util_play_sound(net_nfc_sound_type_e sound_type)
 		}
 	}
 }
-

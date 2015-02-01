@@ -1,24 +1,23 @@
 /*
-  * Copyright (c) 2012, 2013 Samsung Electronics Co., Ltd.
-  *
-  * Licensed under the Flora License, Version 1.1 (the "License");
-  * you may not use this file except in compliance with the License.
-  * You may obtain a copy of the License at
+ * Copyright (c) 2012, 2013 Samsung Electronics Co., Ltd.
+ *
+ * Licensed under the Flora License, Version 1.1 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://floralicense.org/license/
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-  *     http://floralicense.org/license/
-  *
-  * Unless required by applicable law or agreed to in writing, software
-  * distributed under the License is distributed on an "AS IS" BASIS,
-  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  * See the License for the specific language governing permissions and
-  * limitations under the License.
-  */
+#ifndef __NET_NFC_OEM_CONTROLLER_H__
+#define __NET_NFC_OEM_CONTROLLER_H__
 
-
-#ifndef NET_NFC_OEM_CONTROLLER_H
-#define NET_NFC_OEM_CONTROLLER_H
-
-#include "net_nfc_typedef_private.h"
+#include "net_nfc_typedef_internal.h"
 
 typedef bool (*net_nfc_oem_controller_init)(net_nfc_error_e *result);
 typedef bool (*net_nfc_oem_controller_deinit)(void);
@@ -51,7 +50,7 @@ typedef bool (*net_nfc_oem_controller_llcp_activate_llcp)(net_nfc_target_handle_
 typedef bool (*net_nfc_oem_controller_llcp_create_socket)(net_nfc_llcp_socket_t *socket, net_nfc_socket_type_e socketType, uint16_t miu, uint8_t rw, net_nfc_error_e *result, void *user_param);
 typedef bool (*net_nfc_oem_controller_llcp_bind)(net_nfc_llcp_socket_t socket, uint8_t service_access_point, net_nfc_error_e *result);
 typedef bool (*net_nfc_oem_controller_llcp_listen)(net_nfc_target_handle_s *handle, uint8_t *service_access_name, net_nfc_llcp_socket_t socket, net_nfc_error_e *result, void *user_param);
-typedef bool (*net_nfc_oem_controller_llcp_accept)(net_nfc_llcp_socket_t socket, net_nfc_error_e *result);
+typedef bool (*net_nfc_oem_controller_llcp_accept)(net_nfc_llcp_socket_t socket, net_nfc_error_e *result, void *user_param);
 typedef bool (*net_nfc_oem_controller_llcp_connect_by_url)(net_nfc_target_handle_s *handle, net_nfc_llcp_socket_t socket, uint8_t *service_access_name, net_nfc_error_e *result, void *user_param);
 typedef bool (*net_nfc_oem_controller_llcp_connect)(net_nfc_target_handle_s *handle, net_nfc_llcp_socket_t socket, uint8_t service_access_point, net_nfc_error_e *result, void *user_param);
 typedef bool (*net_nfc_oem_controller_llcp_disconnect)(net_nfc_target_handle_s *handle, net_nfc_llcp_socket_t socket, net_nfc_error_e *result, void *user_param);
@@ -78,6 +77,8 @@ typedef bool (*net_nfc_oem_controller_prbs_test)(net_nfc_error_e *result , int t
 typedef bool (*net_nfc_oem_controller_test_mode_on)(net_nfc_error_e *result);
 typedef bool (*net_nfc_oem_controller_test_mode_off)(net_nfc_error_e *result);
 typedef bool (*net_nfc_oem_controller_eedata_register_set)(net_nfc_error_e *result , uint32_t mode , uint32_t reg_id , data_s *data);
+typedef bool (*net_nfc_oem_controller_ese_test)(net_nfc_error_e *result);
+typedef bool (*net_nfc_oem_controller_test_set_se_tech_type)(net_nfc_error_e *result, net_nfc_se_type_e type, uint32_t tech);
 
 typedef struct _net_nfc_oem_interface_s
 {
@@ -127,6 +128,7 @@ typedef struct _net_nfc_oem_interface_s
 	net_nfc_oem_controller_prbs_test prbs_test;
 	net_nfc_oem_controller_test_mode_on test_mode_on;
 	net_nfc_oem_controller_test_mode_off test_mode_off;
+	net_nfc_oem_controller_ese_test ese_test;
 
 	net_nfc_oem_controller_support_nfc support_nfc;
 	net_nfc_oem_controller_eedata_register_set eedata_register_set;
@@ -135,6 +137,8 @@ typedef struct _net_nfc_oem_interface_s
 	net_nfc_oem_controller_secure_element_get_atr secure_element_get_atr;
 	net_nfc_oem_controller_secure_element_send_apdu secure_element_send_apdu;
 	net_nfc_oem_controller_secure_element_close secure_element_close;
+
+	net_nfc_oem_controller_test_set_se_tech_type test_set_se_tech_type;
 } net_nfc_oem_interface_s;
 
-#endif
+#endif //__NET_NFC_OEM_CONTROLLER_H__

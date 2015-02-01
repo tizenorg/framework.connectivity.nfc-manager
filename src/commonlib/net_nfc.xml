@@ -1,0 +1,693 @@
+<!--
+  org.tizen.NfcService
+
+-->
+
+<node>
+  <interface name="org.tizen.NetNfcService.Manager">
+    <!--
+      SetActive
+    -->
+    <method name="SetActive">
+      <arg type="b" name="is_active" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      GetServerState
+    -->
+    <method name="GetServerState">
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="u" name="state" direction="out" />
+    </method>
+
+    <!--
+      Activated
+    -->
+    <signal name="Activated">
+      <arg type="b" name="active" />
+    </signal>
+  </interface>
+
+  <interface name="org.tizen.NetNfcService.Tag">
+    <!--
+      IsConnected
+    -->
+    <method name="IsTagConnected">
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="b" name="is_connected" direction="out" />
+      <arg type="i" name="dev_type" direction="out" />
+    </method>
+
+    <!--
+      GetInfo
+    -->
+    <method name="GetCurrentTagInfo">
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="b" name="is_connected" direction="out" />
+      <arg type="u" name="handle" direction="out" />
+      <arg type="i" name="dev_type" direction="out" />
+      <arg type="b" name="is_ndef_supported" direction="out" />
+      <arg type="y" name="ndef_card_state" direction="out" />
+      <arg type="u" name="max_data_size" direction="out" />
+      <arg type="u" name="actual_data_size" direction="out" />
+      <arg type="u" name="number_of_keys" direction="out" />
+      <arg type="a(y)" name="target_info_values" direction="out" />
+      <arg type="a(y)" name="raw_data" direction="out" />
+    </method>
+
+    <!--
+      GetBarcode
+    -->
+    <method name="GetBarcode">
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="a(y)" name="barcode" direction="out" />
+    </method>
+
+    <!--
+      GetTagetHandle
+    -->
+    <method name="GetCurrentTargetHandle">
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="b" name="is_connected" direction="out" />
+      <arg type="u" name="handle" direction="out" />
+      <arg type="i" name="dev_type" direction="out" />
+    </method>
+
+    <!--
+      TagDiscovered
+    -->
+    <signal name="TagDiscovered">
+      <arg type="u" name="handle" />
+      <arg type="i" name="dev_type" />
+      <arg type="b" name="is_ndef_supported" />
+      <arg type="y" name="ndef_card_state" />
+      <arg type="u" name="max_data_size" />
+      <arg type="u" name="actual_data_size" />
+      <arg type="u" name="number_of_keys" />
+      <arg type="a(y)" name="target_info_values" />
+      <arg type="a(y)" name="raw_data" />
+    </signal>
+
+    <!--
+      TagDetached
+    -->
+    <signal name="TagDetached">
+      <arg type="u" name="handle" />
+      <arg type="i" name="dev_type" />
+    </signal>
+  </interface>
+
+  <interface name="org.tizen.NetNfcService.Ndef">
+    <!--
+      Read
+    -->
+    <method name="Read">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="a(y)" name="data" direction="out" />
+    </method>
+
+    <!--
+      Write
+    -->
+    <method name="Write">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="a(y)" name="data" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      MakeReadOnly
+    -->
+    <method name="MakeReadOnly">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      Format
+    -->
+    <method name="Format">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="a(y)" name="key" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+  </interface>
+
+  <interface name="org.tizen.NetNfcService.Llcp">
+    <!--
+      Config
+    -->
+    <method name="Config">
+      <arg type="(qqyy)" name="config" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      Listen
+    -->
+    <method name="Listen">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="client_socket" direction="in" />
+      <arg type="q" name="miu" direction="in" />
+      <arg type="y" name="rw" direction="in" />
+      <arg type="i" name="type" direction="in" />
+      <arg type="y" name="sap" direction="in" />
+      <arg type="s" name="service_name" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="u" name="client_socket" direction="out" />
+    </method>
+
+    <!--
+      Accept
+    -->
+    <method name="Accept">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="client_socket" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      Reject
+    -->
+    <method name="Reject">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="client_socket" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      Connect
+    -->
+    <method name="Connect">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="client_socket" direction="in" />
+      <arg type="q" name="miu" direction="in" />
+      <arg type="y" name="rw" direction="in" />
+      <arg type="i" name="type" direction="in" />
+      <arg type="s" name="service_name" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="u" name="client_socket" direction="out" />
+    </method>
+
+    <!--
+      ConnectSap
+    -->
+    <method name="ConnectSap">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="client_socket" direction="in" />
+      <arg type="q" name="miu" direction="in" />
+      <arg type="y" name="rw" direction="in" />
+      <arg type="i" name="type" direction="in" />
+      <arg type="y" name="sap" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="u" name="client_socket" direction="out" />
+    </method>
+
+    <!--
+      Send
+    -->
+    <method name="Send">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="client_socket" direction="in" />
+      <arg type="a(y)" name="data" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="u" name="client_socket" direction="out" />
+    </method>
+
+    <!--
+      SendTo
+    -->
+    <method name="SendTo">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="client_socket" direction="in" />
+      <arg type="y" name="sap" direction="in" />
+      <arg type="a(y)" name="data" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="u" name="client_socket" direction="out" />
+    </method>
+
+    <!--
+      Receive
+    -->
+    <method name="Receive">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="client_socket" direction="in" />
+      <arg type="u" name="request_length" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="a(y)" name="data" direction="out" />
+    </method>
+
+    <!--
+      ReceiveFrom
+    -->
+    <method name="ReceiveFrom">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="client_socket" direction="in" />
+      <arg type="u" name="request_length" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="y" name="sap" direction="out" />
+      <arg type="a(y)" name="data" direction="out" />
+    </method>
+
+    <!--
+      Close
+    -->
+    <method name="Close">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="client_socket" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="u" name="client_socket" direction="out" />
+    </method>
+
+    <!--
+      Disconnect
+    -->
+    <method name="Disconnect">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="client_socket" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="u" name="client_socket" direction="out" />
+    </method>
+
+    <!--
+      Error
+    -->
+    <signal name="Error">
+      <arg type="u" name="handle" />
+      <arg type="u" name="client_socket" />
+      <arg type="i" name="error" />
+    </signal>
+
+    <!--
+      Incoming
+    -->
+    <signal name="Incoming">
+      <arg type="u" name="handle" />
+      <arg type="u" name="client_socket" />
+      <arg type="u" name="incoming_socket" />
+    </signal>
+  </interface>
+
+  <interface name="org.tizen.NetNfcService.P2p">
+    <!--
+      Send
+    -->
+    <method name="Send">
+      <arg type="i" name="type" direction="in" />
+      <arg type="a(y)" name="data" direction="in" />
+      <arg type="u" name="handle" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      Detached
+    -->
+    <signal name="Detached" />
+
+    <!--
+      Discovered
+    -->
+    <signal name="Discovered">
+      <arg type="u" name="handle" />
+    </signal>
+
+    <!--
+      Receive
+    -->
+    <signal name="Received">
+      <arg type="a(y)" name="data" />
+    </signal>
+  </interface>
+
+  <interface name="org.tizen.NetNfcService.Popup">
+    <!--
+      Set
+    -->
+    <method name="Set">
+      <arg type="i" name="state" direction="in" />
+      <arg type="i" name="focus_state" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      Get
+    -->
+    <method name="Get">
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="i" name="state" direction="out" />
+    </method>
+  </interface>
+
+  <interface name="org.tizen.NetNfcService.SecureElement">
+    <!--
+      Set
+    -->
+    <method name="Set">
+      <arg type="i" name="type" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      Get
+    -->
+    <method name="Get">
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="i" name="type" direction="out" />
+    </method>
+
+    <!--
+      SetCardEmulation
+    -->
+    <method name="SetCardEmulation">
+      <arg type="i" name="mode" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      GetCardEmulation
+    -->
+    <method name="GetCardEmulation">
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="i" name="type" direction="out" />
+    </method>
+
+    <!--
+      OpenSecureElement
+    -->
+    <method name="OpenSecureElement">
+      <arg type="i" name="type" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="u" name="handle" direction="out" />
+    </method>
+
+    <!--
+      CloseSecureElement
+    -->
+    <method name="CloseSecureElement">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      GetAtr
+    -->
+    <method name="GetAtr">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="a(y)" name="atr" direction="out" />
+    </method>
+
+    <!--
+      SendAPDU
+    -->
+    <method name="SendAPDU">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="a(y)" name="data" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="a(y)" name="response" direction="out" />
+    </method>
+
+    <!--
+      SetTransactionFgDispatch
+    -->
+    <method name="SetTransactionFgDispatch">
+      <arg type="i" name="mode" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      CheckTransactionPermission
+    -->
+    <method name="CheckTransactionPermission">
+      <arg type="a(y)" name="aid" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      EseDetected
+    -->
+    <signal name="EseDetected">
+      <arg type="u" name="handle" />
+      <arg type="i" name="se_type" />
+      <arg type="a(y)" name="data" />
+    </signal>
+
+    <!--
+      SeTypeChanged
+    -->
+    <signal name="SeTypeChanged">
+      <arg type="i" name="se_type" />
+    </signal>
+
+    <!--
+      CardEmulationModeChanged
+    -->
+    <signal name="CardEmulationModeChanged">
+      <arg type="i" name="mode" />
+    </signal>
+
+    <!--
+      TransactionEvent
+    -->
+    <signal name="TransactionEvent">
+      <arg type="i" name="se_type" />
+      <arg type="a(y)" name="aid" />
+      <arg type="a(y)" name="param" />
+      <arg type="i" name="fg_dispatch" />
+      <arg type="i" name="focus_pgid" />
+    </signal>
+  </interface>
+
+  <interface name="org.tizen.NetNfcService.Transceive">
+    <!--
+      TransceiveData
+    -->
+    <method name="TransceiveData">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="dev_type" direction="in" />
+      <arg type="a(y)" name="data" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="a(y)" name="resp_data" direction="out" />
+    </method>
+
+    <!--
+      Transceive
+    -->
+    <method name="Transceive">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="dev_type" direction="in" />
+      <arg type="a(y)" name="data" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+  </interface>
+
+  <interface name="org.tizen.NetNfcService.Handover">
+    <!--
+      Request
+    -->
+    <method name="Request">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="i" name="type" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="i" name="carrier_type" direction="out" />
+      <arg type="a(y)" name="handover_data" direction="out" />
+    </method>
+
+    <!--
+      Started
+    -->
+    <signal name="Started">
+      <arg type="a(y)" name="message" />
+    </signal>
+
+    <!--
+      Finished
+    -->
+    <signal name="Finished">
+      <arg type="i" name="result" />
+      <arg type="i" name="type" />
+      <arg type="a(y)" name="address" />
+      <arg type="a(y)" name="message" />
+    </signal>
+  </interface>
+
+  <interface name="org.tizen.NetNfcService.Test">
+    <!--
+      SimTest
+    -->
+    <method name="SimTest">
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      PrbsTest
+    -->
+    <method name="PrbsTest">
+      <arg type="u" name="tech" direction="in" />
+      <arg type="u" name="rate" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      GetFirmwareVersion
+    -->
+    <method name="GetFirmwareVersion">
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="s" name="version" direction="out" />
+    </method>
+
+    <!--
+      SetEeData
+    -->
+    <method name="SetEeData">
+      <arg type="u" name="mode" direction="in" />
+      <arg type="u" name="reg_id" direction="in" />
+      <arg type="a(y)" name="data" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      eseTest
+    -->
+    <method name="EseTest">
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      SetSeTechType
+    -->
+    <method name="SetSeTechType">
+      <arg type="u" name="type" direction="in" />
+      <arg type="u" name="tech" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+  </interface>
+
+  <interface name="org.tizen.NetNfcService.Snep">
+    <!--
+      Register Server
+    -->
+    <method name="ServerRegister">
+      <arg type="u" name="sap" direction="in" />
+      <arg type="s" name="san" direction="in" />
+      <arg type="u" name="user_data" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      Unregister Server
+    -->
+    <method name="ServerUnregister">
+      <arg type="u" name="sap" direction="in" />
+      <arg type="s" name="san" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      Start Server
+    -->
+    <method name="ServerStart">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="sap" direction="in" />
+      <arg type="s" name="san" direction="in" />
+      <arg type="u" name="user_data" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      Start Client
+    -->
+    <method name="ClientStart">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="sap" direction="in" />
+      <arg type="s" name="san" direction="in" />
+      <arg type="u" name="user_data" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      ClientRequest
+    -->
+    <method name="ClientRequest">
+      <arg type="u" name="snep_handle" direction="in" />
+      <arg type="u" name="type" direction="in" />
+      <arg type="a(y)" name="ndef_msg" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="u" name="type" direction="out" />
+      <arg type="a(y)" name="data" direction="out" />
+    </method>
+
+    <!--
+      StopService
+    -->
+    <method name="StopSnep">
+      <arg type="u" name="handle" direction="in" />
+      <arg type="u" name="snep_handle" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+    </method>
+
+    <!--
+      SnepEvent
+    -->
+    <signal name="SnepEvent">
+      <arg type="u" name="handle" />
+      <arg type="u" name="event" />
+      <arg type="i" name="result" />
+      <arg type="a(y)" name="ndef_msg" />
+      <arg type="u" name="user_data" />
+    </signal>
+  </interface>
+
+</node>

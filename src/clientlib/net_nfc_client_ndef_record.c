@@ -17,109 +17,130 @@
 #include "net_nfc_ndef_record.h"
 #include "net_nfc_ndef_message.h"
 #include "net_nfc_data.h"
-#include "net_nfc_debug_private.h"
-#include "net_nfc_util_private.h"
+#include "net_nfc_debug_internal.h"
+#include "net_nfc_util_internal.h"
 #include "net_nfc_util_ndef_record.h"
 
 #ifndef NET_NFC_EXPORT_API
 #define NET_NFC_EXPORT_API __attribute__((visibility("default")))
 #endif
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_create_record(ndef_record_h* record, net_nfc_record_tnf_e tnf, data_h typeName, data_h id, data_h payload)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_create_record(ndef_record_h *record,
+	net_nfc_record_tnf_e tnf, data_h typeName, data_h id, data_h payload)
 {
-	return net_nfc_util_create_record(tnf, (data_s*)typeName, (data_s*)id, (data_s*)payload, (ndef_record_s**)record);
+	return net_nfc_util_create_record(tnf, (data_s *)typeName,
+		(data_s *)id, (data_s *)payload, (ndef_record_s **)record);
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_create_text_type_record(ndef_record_h* record, const char* text, const char* language_code_str, net_nfc_encode_type_e encode)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_create_text_type_record(ndef_record_h *record,
+	const char *text, const char *language_code_str,
+	net_nfc_encode_type_e encode)
 {
-	return net_nfc_util_create_text_type_record(text, language_code_str, encode, (ndef_record_s**)record);
+	return net_nfc_util_create_text_type_record(text, language_code_str,
+		encode, (ndef_record_s **)record);
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_create_uri_type_record(ndef_record_h* record, const char* uri, net_nfc_schema_type_e protocol_schema)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_create_uri_type_record(ndef_record_h *record,
+	const char *uri, net_nfc_schema_type_e protocol_schema)
 {
-	return net_nfc_util_create_uri_type_record(uri, protocol_schema, (ndef_record_s**)record);
+	return net_nfc_util_create_uri_type_record(uri, protocol_schema,
+		(ndef_record_s **)record);
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_free_record(ndef_record_h record)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_free_record(ndef_record_h record)
 {
-	return net_nfc_util_free_record((ndef_record_s*)record);
+	return net_nfc_util_free_record((ndef_record_s *)record);
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_record_payload(ndef_record_h record, data_h * payload)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_get_record_payload(ndef_record_h record,
+	data_h *payload)
 {
+	ndef_record_s *struct_record = (ndef_record_s *)record;
+
 	if (record == NULL || payload == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
-	ndef_record_s * struct_record = (ndef_record_s *)record;
 
 	*payload = (data_h)&(struct_record->payload_s);
 
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_record_type(ndef_record_h record, data_h * type)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_get_record_type(ndef_record_h record, data_h *type)
 {
+	ndef_record_s *struct_record = (ndef_record_s *)record;
+
 	if (record == NULL || type == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
-	ndef_record_s * struct_record = (ndef_record_s *)record;
 
 	*type = (data_h)&(struct_record->type_s);
 
 	return NET_NFC_OK;
-
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_record_id(ndef_record_h record, data_h * id)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_get_record_id(ndef_record_h record, data_h *id)
 {
+	ndef_record_s *struct_record = (ndef_record_s *)record;
+
 	if (record == NULL || id == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
-	ndef_record_s * struct_record = (ndef_record_s *)record;
 
 	*id = (data_h)&(struct_record->id_s);
 
 	return NET_NFC_OK;
-
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_record_tnf(ndef_record_h record, net_nfc_record_tnf_e * TNF)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_get_record_tnf(ndef_record_h record,
+	net_nfc_record_tnf_e *TNF)
 {
+	ndef_record_s *struct_record = (ndef_record_s *)record;
+
 	if (record == NULL || TNF == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
-	ndef_record_s * struct_record = (ndef_record_s *)record;
 
 	*TNF = (net_nfc_record_tnf_e)struct_record->TNF;
 
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_set_record_id(ndef_record_h record, data_h id)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_set_record_id(ndef_record_h record, data_h id)
 {
+	data_s *tmp_id = (data_s *)id;
 
-	ndef_record_s * record_private = (ndef_record_s *)record;
-	data_s * id_private = (data_s *)id;
-
-	if (id_private == NULL)
+	if (record == NULL || tmp_id == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
-	return net_nfc_util_set_record_id(record_private, id_private->buffer, id_private->length);
+
+	return net_nfc_util_set_record_id((ndef_record_s *)record,
+		tmp_id->buffer, tmp_id->length);
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_record_flags(ndef_record_h record, uint8_t * flag)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_get_record_flags(ndef_record_h record, uint8_t *flag)
 {
+	ndef_record_s *struct_record = (ndef_record_s *)record;
+
 	if (record == NULL || flag == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
-
-	ndef_record_s * struct_record = (ndef_record_s *)record;
 
 	*flag = struct_record->MB;
 	*flag <<= 1;
@@ -138,148 +159,169 @@ NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_record_flags(ndef_record_h record
 
 NET_NFC_EXPORT_API uint8_t net_nfc_get_record_mb(uint8_t flag)
 {
-	return (flag & 0x80) >> 7;
+	return ((flag >> 7) & 0x01);
 }
 
 NET_NFC_EXPORT_API uint8_t net_nfc_get_record_me(uint8_t flag)
 {
-	return (flag & 0x40) >> 6;
+	return ((flag >> 6) & 0x01);
 }
 
 NET_NFC_EXPORT_API uint8_t net_nfc_get_record_cf(uint8_t flag)
 {
-	return (flag & 0x20) >> 5;
-}
-
-NET_NFC_EXPORT_API uint8_t net_nfc_get_record_il(uint8_t flag)
-{
-	return (flag & 0x10) >> 4;
+	return ((flag >> 5) & 0x01);
 }
 
 NET_NFC_EXPORT_API uint8_t net_nfc_get_record_sr(uint8_t flag)
 {
-	return (flag & 0x08) >> 3;
+	return ((flag >> 4) & 0x01);
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_create_text_string_from_text_record(ndef_record_h record, char** buffer)
+NET_NFC_EXPORT_API uint8_t net_nfc_get_record_il(uint8_t flag)
 {
-	if (record == NULL || buffer == NULL)
-		return NET_NFC_ALLOC_FAIL;
+	return ((flag >> 3) & 0x01);
+}
 
+static bool _is_text_record(ndef_record_h record)
+{
+	bool result = false;
+	data_h type;
+
+	if ((net_nfc_get_record_type(record, &type) == NET_NFC_OK) &&
+		(strncmp((char *)net_nfc_get_data_buffer(type),
+			TEXT_RECORD_TYPE,
+			net_nfc_get_data_length(type)) == 0))
+		result = true;
+
+	return result;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_create_text_string_from_text_record(
+	ndef_record_h record, char **buffer)
+{
+	net_nfc_error_e result;
 	data_h payload;
-	data_h rec_type;
 
-	if (net_nfc_get_record_type(record, &rec_type) == NET_NFC_OK)
+	if (record == NULL || buffer == NULL)
 	{
-		if (strncmp((char *)net_nfc_get_data_buffer(rec_type), TEXT_RECORD_TYPE, 1) != 0)
-		{
-			DEBUG_CLIENT_MSG("record type is not matched");
-			return NET_NFC_NDEF_RECORD_IS_NOT_EXPECTED_TYPE;
-		}
+		return NET_NFC_NULL_PARAMETER;
 	}
 
-	if (net_nfc_get_record_payload(record, &payload) == NET_NFC_OK)
-	{
-		uint8_t *buffer_temp;
-		uint32_t buffer_length = net_nfc_get_data_length(payload);
+	*buffer = NULL;
 
-		buffer_temp = net_nfc_get_data_buffer(payload);
-		if (NULL == buffer_temp)
-			return NET_NFC_NO_DATA_FOUND;
+	if (_is_text_record(record) == false)
+	{
+		DEBUG_ERR_MSG("record type is not matched");
+
+		return NET_NFC_NDEF_RECORD_IS_NOT_EXPECTED_TYPE;
+	}
+
+	result = net_nfc_get_record_payload(record, &payload);
+	if (result == NET_NFC_OK)
+	{
+		uint8_t *buffer_temp = net_nfc_get_data_buffer(payload);
+		uint32_t buffer_length = net_nfc_get_data_length(payload);
 
 		int controllbyte = buffer_temp[0];
 		int lang_code_length = controllbyte & 0x3F;
 		int index = lang_code_length + 1;
 		int text_length = buffer_length - (lang_code_length + 1);
 
-		if ((*buffer = (char *)calloc(1, text_length + 1)) != NULL)
+		char *temp = NULL;
+
+		_net_nfc_util_alloc_mem(temp, text_length + 1);
+		if (temp != NULL)
 		{
-			memcpy(*buffer, &(buffer_temp[index]), text_length);
-			DEBUG_CLIENT_MSG("text = [%s]", *buffer);
+			memcpy(temp, &(buffer_temp[index]), text_length);
+
+			DEBUG_CLIENT_MSG("text = [%s]", temp);
+
+			*buffer = temp;
 		}
 		else
 		{
-			return NET_NFC_ALLOC_FAIL;
+			result = NET_NFC_ALLOC_FAIL;
 		}
 	}
 
-	return NET_NFC_OK;
+	return result;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_languange_code_string_from_text_record(ndef_record_h record, char** lang_code_str)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_get_languange_code_string_from_text_record(
+	ndef_record_h record, char **lang_code_str)
 {
+	net_nfc_error_e result;
+	data_h payload;
+
 	if (record == NULL || lang_code_str == NULL)
 	{
-		return NET_NFC_ALLOC_FAIL;
+		return NET_NFC_NULL_PARAMETER;
 	}
 
-	data_h payload;
-	data_h rec_type;
+	*lang_code_str = NULL;
 
-	if (net_nfc_get_record_type(record, &rec_type) == NET_NFC_OK)
+	if (_is_text_record(record) == false)
 	{
-		if (strncmp((char *)net_nfc_get_data_buffer(rec_type), TEXT_RECORD_TYPE, 1) != 0)
-		{
-			DEBUG_CLIENT_MSG("record type is not matched");
-			return NET_NFC_NDEF_RECORD_IS_NOT_EXPECTED_TYPE;
-		}
+		DEBUG_ERR_MSG("record type is not matched");
+
+		return NET_NFC_NDEF_RECORD_IS_NOT_EXPECTED_TYPE;
 	}
 
-	if (net_nfc_get_record_payload(record, &payload) == NET_NFC_OK)
+	result = net_nfc_get_record_payload(record, &payload);
+	if (result == NET_NFC_OK)
 	{
+		uint8_t *buffer_temp = net_nfc_get_data_buffer(payload);
 		char *buffer = NULL;
-		uint8_t *buffer_temp;
-
-		buffer_temp = net_nfc_get_data_buffer(payload);
-		if (NULL == buffer_temp)
-			return NET_NFC_NO_DATA_FOUND;
 
 		int controllbyte = buffer_temp[0];
 		int lang_code_length = controllbyte & 0x3F;
 		int index = 1;
 
-		if ((buffer = (char *)calloc(1, lang_code_length + 1)) != NULL)
+		_net_nfc_util_alloc_mem(buffer, lang_code_length + 1);
+		if (buffer != NULL)
 		{
 			memcpy(buffer, &(buffer_temp[index]), lang_code_length);
+
 			DEBUG_CLIENT_MSG("language code = [%s]", buffer);
 
 			*lang_code_str = buffer;
 		}
 		else
 		{
-			return NET_NFC_ALLOC_FAIL;
+			result = NET_NFC_ALLOC_FAIL;
 		}
 	}
 
-	return NET_NFC_OK;
+	return result;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_encoding_type_from_text_record(ndef_record_h record, net_nfc_encode_type_e * encoding)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_get_encoding_type_from_text_record(ndef_record_h record,
+	net_nfc_encode_type_e *encoding)
 {
+	net_nfc_error_e result;
+	data_h payload;
+
 	if (record == NULL || encoding == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	data_h payload;
-	data_h rec_type;
+	*encoding = NET_NFC_ENCODE_UTF_8;
 
-	if (net_nfc_get_record_type(record, &rec_type) == NET_NFC_OK)
+	if (_is_text_record(record) == false)
 	{
-		if (strncmp((char *)net_nfc_get_data_buffer(rec_type), TEXT_RECORD_TYPE, 1) != 0)
-		{
-			DEBUG_CLIENT_MSG("record type is not matched");
-			return NET_NFC_NDEF_RECORD_IS_NOT_EXPECTED_TYPE;
-		}
+		DEBUG_ERR_MSG("record type is not matched");
+
+		return NET_NFC_NDEF_RECORD_IS_NOT_EXPECTED_TYPE;
 	}
 
-	if (net_nfc_get_record_payload(record, &payload) == NET_NFC_OK)
+	result = net_nfc_get_record_payload(record, &payload);
+	if (result == NET_NFC_OK)
 	{
-		uint8_t *buffer_temp;
-
-		buffer_temp = net_nfc_get_data_buffer(payload);
-		if (NULL == buffer_temp)
-			return NET_NFC_NO_DATA_FOUND;
+		uint8_t *buffer_temp = net_nfc_get_data_buffer(payload);
 
 		int controllbyte = buffer_temp[0];
 
@@ -287,16 +329,15 @@ NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_encoding_type_from_text_record(nd
 		{
 			*encoding = NET_NFC_ENCODE_UTF_16;
 		}
-		else
-		{
-			*encoding = NET_NFC_ENCODE_UTF_8;
-		}
 	}
 
-	return NET_NFC_OK;
+	return result;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_create_uri_string_from_uri_record(ndef_record_h record, char **uri)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_create_uri_string_from_uri_record(ndef_record_h record,
+	char **uri)
 {
-	return net_nfc_util_create_uri_string_from_uri_record((ndef_record_s *)record, uri);
+	return net_nfc_util_create_uri_string_from_uri_record(
+		(ndef_record_s *)record, uri);
 }

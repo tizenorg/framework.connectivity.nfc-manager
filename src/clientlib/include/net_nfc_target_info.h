@@ -1,19 +1,18 @@
 /*
-  * Copyright (c) 2012, 2013 Samsung Electronics Co., Ltd.
-  *
-  * Licensed under the Flora License, Version 1.1 (the "License");
-  * you may not use this file except in compliance with the License.
-  * You may obtain a copy of the License at
-
-  *     http://floralicense.org/license/
-  *
-  * Unless required by applicable law or agreed to in writing, software
-  * distributed under the License is distributed on an "AS IS" BASIS,
-  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  * See the License for the specific language governing permissions and
-  * limitations under the License.
-  */
-
+ * Copyright (c) 2012, 2013 Samsung Electronics Co., Ltd.
+ *
+ * Licensed under the Flora License, Version 1.1 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://floralicense.org/license/
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #ifndef __NET_NFC_TARGET_INFO_H__
 #define __NET_NFC_TARGET_INFO_H__
@@ -32,7 +31,7 @@ extern "C" {
 
         NFC Manager defines are defined in <nfc-typedef.h>
 
-        These APIs help to get infomation of detected target. these target info handler holds
+        These APIs help to get information of detected target. these target info handler holds
         - type of target
         - target ID
         - ndef message supporting
@@ -41,7 +40,7 @@ extern "C" {
 */
 
 /**
-	type getter from targte info handler
+	type getter from target info handler
 
 	\par Sync (or) Async: Sync
 	This is a Synchronous API
@@ -51,14 +50,14 @@ extern "C" {
 
 	@return		return the result of calling this functions
 
-	@exception 	NET_NFC_NULL_PARAMETER		parameter(s) has(have) illigal NULL pointer(s)
+	@exception 	NET_NFC_NULL_PARAMETER		parameter(s) has(have) illegal NULL pointer(s)
 
 */
 
-net_nfc_error_e net_nfc_get_tag_type (net_nfc_target_info_h target_info, net_nfc_target_type_e * type);
+net_nfc_error_e net_nfc_get_tag_type(net_nfc_target_info_h target_info, net_nfc_target_type_e *type);
 
 /**
-	type getter from targte info handler
+	type getter from target info handler
 
 	\par Sync (or) Async: Sync
 	This is a Synchronous API
@@ -68,11 +67,11 @@ net_nfc_error_e net_nfc_get_tag_type (net_nfc_target_info_h target_info, net_nfc
 
 	@return		return the result of calling this functions
 
-	@exception 	NET_NFC_NULL_PARAMETER		parameter(s) has(have) illigal NULL pointer(s)
+	@exception 	NET_NFC_NULL_PARAMETER		parameter(s) has(have) illegal NULL pointer(s)
 
 */
 
-net_nfc_error_e net_nfc_get_tag_handle(net_nfc_target_info_h target_info, net_nfc_target_handle_h * handle);
+net_nfc_error_e net_nfc_get_tag_handle(net_nfc_target_info_h target_info, net_nfc_target_handle_h *handle);
 
 /**
 	this API returns the NDEF support boolean value.
@@ -86,14 +85,30 @@ net_nfc_error_e net_nfc_get_tag_handle(net_nfc_target_info_h target_info, net_nf
 
 	@return		return the result of calling this functions
 
-	@exception 	NET_NFC_NULL_PARAMETER		parameter(s) has(have) illigal NULL pointer(s)
+	@exception 	NET_NFC_NULL_PARAMETER		parameter(s) has(have) illegal NULL pointer(s)
 
 */
 
-net_nfc_error_e net_nfc_get_tag_ndef_support (net_nfc_target_info_h target_info, bool * is_support);
+net_nfc_error_e net_nfc_get_tag_ndef_support(net_nfc_target_info_h target_info, bool *is_support);
 
 /**
-	The max size getter from targte info handler. This max size indicates the maximum size of NDEF message that can be stored in this detected tag.
+	Get current ndef tag state
+
+	\par Sync (or) Async: Sync
+	This is a Synchronous API
+
+	@param[in]	target_info 	target info handler
+	@param[out]	state		ndef tag state
+
+	@return		return the result of calling this functions
+
+	@exception 	NET_NFC_NULL_PARAMETER		parameter(s) has(have) illegal NULL pointer(s)
+*/
+
+net_nfc_error_e net_nfc_get_tag_ndef_state(net_nfc_target_info_h target_info, net_nfc_ndef_card_state_e *state);
+
+/**
+	The max size getter from target info handler. This max size indicates the maximum size of NDEF message that can be stored in this detected tag.
 
 	\par Sync (or) Async: Sync
 	This is a Synchronous API
@@ -103,11 +118,11 @@ net_nfc_error_e net_nfc_get_tag_ndef_support (net_nfc_target_info_h target_info,
 
 	@return		return the result of calling this functions
 
-	@exception 	NET_NFC_NULL_PARAMETER		parameter(s) has(have) illigal NULL pointer(s)
+	@exception 	NET_NFC_NULL_PARAMETER		parameter(s) has(have) illegal NULL pointer(s)
 
 */
 
-net_nfc_error_e net_nfc_get_tag_max_data_size (net_nfc_target_info_h target_info, uint32_t * max_size);
+net_nfc_error_e net_nfc_get_tag_max_data_size(net_nfc_target_info_h target_info, uint32_t *max_size);
 
 /**
 	this function return the actual NDEF message size that stored in the tag
@@ -120,11 +135,11 @@ net_nfc_error_e net_nfc_get_tag_max_data_size (net_nfc_target_info_h target_info
 
 	@return		return the result of calling this functions
 
-	@exception 	NET_NFC_NULL_PARAMETER		parameter(s) has(have) illigal NULL pointer(s)
+	@exception 	NET_NFC_NULL_PARAMETER		parameter(s) has(have) illegal NULL pointer(s)
 
 */
 
-net_nfc_error_e net_nfc_get_tag_actual_data_size (net_nfc_target_info_h target_info, uint32_t * actual_data);
+net_nfc_error_e net_nfc_get_tag_actual_data_size(net_nfc_target_info_h target_info, uint32_t *actual_data);
 
 
 /**
@@ -137,7 +152,7 @@ net_nfc_error_e net_nfc_get_tag_actual_data_size (net_nfc_target_info_h target_i
 	@param[out]	keys 			pointer of double array. it will be array of string.
 	@param[out]	number_of_keys	length of array.
 
-	@exception 	NET_NFC_NULL_PARAMETER		parameter(s) has(have) illigal NULL pointer(s)
+	@exception 	NET_NFC_NULL_PARAMETER		parameter(s) has(have) illegal NULL pointer(s)
 	@exception 	NET_NFC_ALLOC_FAIL			memory allocation is failed
 	@exception 	NET_NFC_NO_DATA_FOUND		No data is returned
 
@@ -177,7 +192,7 @@ net_nfc_error_e net_nfc_get_tag_actual_data_size (net_nfc_target_info_h target_i
 
 */
 
-net_nfc_error_e net_nfc_get_tag_info_keys(net_nfc_target_info_h target_info, char ***keys, int* number_of_keys);
+net_nfc_error_e net_nfc_get_tag_info_keys(net_nfc_target_info_h target_info, char ***keys, int *number_of_keys);
 
 /**
 	this function return value which is matched key
@@ -228,7 +243,26 @@ net_nfc_error_e net_nfc_get_tag_info_keys(net_nfc_target_info_h target_info, cha
 	@exception 	NET_NFC_NO_DATA_FOUND		No data is returned
 */
 
-net_nfc_error_e net_nfc_get_tag_info_value(net_nfc_target_info_h target_info, const char* key, data_h* value);
+net_nfc_error_e net_nfc_get_tag_info_value(net_nfc_target_info_h target_info, const char *key, data_h *value);
+
+/**
+	Get ndef message of current tag
+
+	@remark This data can be expired because it is snapshot when tag was attached. If you want to get updated data, call @net_nfc_client_ndef_read function.
+	@remark @msg must be release by caller with @net_nfc_free_ndef_message
+
+	\par Sync (or) Async: Sync
+	This is a Synchronous API
+
+	@param[in]	target_info 	target info handler
+	@param[out]	msg		ndef message
+
+	@return		return the result of calling this functions
+
+	@exception 	NET_NFC_NULL_PARAMETER		parameter(s) has(have) illegal NULL pointer(s)
+*/
+
+net_nfc_error_e net_nfc_get_tag_ndef_message(net_nfc_target_info_h target_info, ndef_message_h *msg);
 
 /**
 	Duplicate a handle of target information
@@ -309,6 +343,4 @@ net_nfc_error_e net_nfc_release_tag_info(net_nfc_target_info_h target_info);
 #endif
 
 
-#endif
-
-
+#endif //__NET_NFC_TARGET_INFO_H__

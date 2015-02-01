@@ -20,10 +20,10 @@
 #include <openssl/pkcs12.h>
 #include <openssl/pem.h>
 
-#include "net_nfc_typedef_private.h"
-#include "net_nfc_debug_private.h"
-#include "net_nfc_util_private.h"
-#include "net_nfc_util_openssl_private.h"
+#include "net_nfc_typedef_internal.h"
+#include "net_nfc_debug_internal.h"
+#include "net_nfc_util_internal.h"
+#include "net_nfc_util_openssl_internal.h"
 
 //static X509 *_load_certificate_from_file(const char *file)
 //{

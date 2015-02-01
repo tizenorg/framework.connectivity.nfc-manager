@@ -1,10 +1,13 @@
 [Unit]
 Description=NFC manager
+After=system-server.service csc-starter.service
+Requires=system-server.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/nfc-manager-daemon
+ExecStart=/usr/bin/nfc-manager-daemon --daemon
 KillSignal=SIGKILL
+MemoryLimit=30M
 
 [Install]
 WantedBy=multi-user.target

@@ -17,18 +17,45 @@
 
 #include <sys/param.h>
 
-#include "net_nfc_debug_private.h"
+#include "net_nfc_debug_internal.h"
 #include "net_nfc_util_defines.h"
-#include "net_nfc_util_private.h"
+#include "net_nfc_util_internal.h"
 #include "net_nfc_util_ndef_message.h"
 #include "net_nfc_util_ndef_record.h"
-#include "net_nfc_util_openssl_private.h"
+#include "net_nfc_util_openssl_internal.h"
 #include "net_nfc_util_sign_record.h"
+
+typedef struct _net_nfc_sub_field_s
+{
+	uint16_t length;
+	uint8_t value[0];
+}
+__attribute__((packed)) net_nfc_sub_field_s;
+
+typedef struct _net_nfc_signature_record_s
+{
+	uint8_t version;
+	uint8_t sign_type : 7;
+	uint8_t uri_present : 1;
+	net_nfc_sub_field_s signature;
+}
+__attribute__((packed)) net_nfc_signature_record_s;
+
+typedef struct _net_nfc_certificate_chain_s
+{
+	uint8_t num_of_certs : 4;
+	uint8_t cert_format : 3;
+	uint8_t uri_present : 1;
+	uint8_t cert_store[0];
+}
+__attribute__((packed)) net_nfc_certificate_chain_s;
+
+#define SIGNATURE_RECORD_TYPE	"Sig"
 
 #define IS_SIGN_RECORD(__x) \
 	(((__x)->TNF == NET_NFC_RECORD_WELL_KNOWN_TYPE) && \
 	((__x)->type_s.length == 3) && \
-	(memcmp((__x)->type_s.buffer, "Sig", 3) == 0))
+	(memcmp((__x)->type_s.buffer, SIGNATURE_RECORD_TYPE, 3) == 0))
 
 #define IS_EMPTY_RECORD(__x) \
 	((__x->TNF == NET_NFC_RECORD_EMPTY))
@@ -158,7 +185,7 @@ net_nfc_error_e net_nfc_util_verify_signature_records(ndef_record_s *begin_recor
 		/* parse certificate chain info */
 		chain_info = (net_nfc_certificate_chain_s *)__NEXT_SUB_FIELD(&(sign_info->signature));
 
-		DEBUG_MSG("certificate URI present? : %s", chain_info->uri_present ? "true" : "false");
+		SECURE_LOGD("certificate URI present? : %s", chain_info->uri_present ? "true" : "false");
 		DEBUG_MSG("certificate format : %d", chain_info->cert_format);
 		DEBUG_MSG("number of certificates : %d", chain_info->num_of_certs);
 
@@ -167,13 +194,13 @@ net_nfc_error_e net_nfc_util_verify_signature_records(ndef_record_s *begin_recor
 			net_nfc_sub_field_s *data_info = NULL;
 
 			data_info = (net_nfc_sub_field_s *)chain_info->cert_store;
-			DEBUG_MSG("certficate length : %d", data_info->length);
+			DEBUG_MSG("certificate length : %d", data_info->length);
 
 	//		DEBUG_MSG_PRINT_BUFFER(data_info->value, data_info->length);
 
 			/* the first certificate is signer's one
 			 * verify signature of content */
-			if (net_nfc_util_openssl_verify_signature(sign_info->sign_type, buffer, length, data_info->value, data_info->length, sign_info->signature.value, sign_info->signature.length) == true)
+			if (net_nfc_util_openssl_verify_signature(sign_info->sign_type, buffer, length, data_info->value, data_info->length, signature, sign_len) == true)
 			{
 				if (chain_info->num_of_certs > 1)
 				{
@@ -238,6 +265,10 @@ net_nfc_error_e net_nfc_util_verify_signature_records(ndef_record_s *begin_recor
 	}
 	else
 	{
+		if(buffer != NULL)
+		{
+			_net_nfc_util_free_mem(buffer);
+		}
 		DEBUG_ERR_MSG("_get_records_data_buffer failed");
 	}
 
@@ -305,13 +336,20 @@ net_nfc_error_e net_nfc_util_sign_records(ndef_message_s *msg, int begin_index, 
 
 	net_nfc_util_openssl_sign_buffer(NET_NFC_SIGN_TYPE_PKCS_1, data_buffer, data_len, cert_file, password, signature, &sign_len);
 
+	_net_nfc_util_free_mem(data_buffer);
+
 	/* get cert chain */
 	net_nfc_util_get_cert_list_from_file(cert_file, password, &cert_buffer, &cert_len, &cert_count);
 
 	/* create payload */
 	payload.length = sizeof(net_nfc_signature_record_s) + sign_len + sizeof(net_nfc_certificate_chain_s) + cert_len;
 
-	_net_nfc_util_alloc_mem(payload.buffer, payload.length);
+	if (net_nfc_util_init_data(&payload, payload.length) == false) {
+		_net_nfc_util_free_mem(cert_buffer);
+		result = NET_NFC_ALLOC_FAIL;
+
+		return result;
+	}
 
 	net_nfc_signature_record_s *sign_record = (net_nfc_signature_record_s *)payload.buffer;
 	sign_record->version = 1;
@@ -348,16 +386,17 @@ net_nfc_error_e net_nfc_util_sign_records(ndef_message_s *msg, int begin_index, 
 	}
 
 	/* create record */
-	data_s type = { (uint8_t *)"Sig", 3 };
+	data_s type = { (uint8_t *)SIGNATURE_RECORD_TYPE, 3 };
 
 	net_nfc_util_create_record(NET_NFC_RECORD_WELL_KNOWN_TYPE, &type, NULL, &payload, &record);
 
 	/* get last record index */
 	net_nfc_util_append_record_by_index(msg, end_index + 1, record);
 
-	_net_nfc_util_free_mem(payload.buffer);
+	result = NET_NFC_OK;
+
+	net_nfc_util_clear_data(&payload);
 	_net_nfc_util_free_mem(cert_buffer);
-	_net_nfc_util_free_mem(data_buffer);
 
 	return result;
 }

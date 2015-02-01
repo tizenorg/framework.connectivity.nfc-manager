@@ -15,13 +15,111 @@
   */
 
 
-#include "net_nfc_debug_private.h"
+#include "net_nfc_debug_internal.h"
 #include "net_nfc_util_defines.h"
-#include "net_nfc_util_private.h"
+#include "net_nfc_util_internal.h"
 #include "net_nfc_util_ndef_message.h"
 #include "net_nfc_util_ndef_record.h"
 
+typedef struct _ndef_header_t
+{
+	uint8_t tnf : 3;
+	uint8_t il : 1;
+	uint8_t sr : 1;
+	uint8_t cf : 1;
+	uint8_t me : 1;
+	uint8_t mb : 1;
+	uint8_t type_len;
+	uint8_t payload_len[0];
+}
+__attribute__((packed)) ndef_header_t;
+
+#define GET_PAYLOAD_LEN(__x)	((__x->sr) ? (__x->payload_len[0]) : \
+	((__x->payload_len[0] << 24) | (__x->payload_len[1] << 16) | \
+	(__x->payload_len[2] << 8) | (__x->payload_len[3])))
+
 static net_nfc_error_e __net_nfc_repair_record_flags(ndef_message_s *ndef_message);
+
+net_nfc_error_e net_nfc_util_check_ndef_message_rawdata(data_s *rawdata)
+{
+	uint32_t offset = 0, records = 0;
+	uint8_t *buffer;
+	uint32_t length, id_len, payload_len;
+	ndef_header_t *header = NULL;
+
+	if (rawdata == NULL || rawdata->buffer == NULL || rawdata->length == 0)
+		return NET_NFC_NULL_PARAMETER;
+
+	buffer = rawdata->buffer;
+	length = rawdata->length;
+
+	while (offset < length) {
+		/* header */
+		header = (ndef_header_t *)(buffer + offset);
+
+		offset += sizeof(*header);
+
+		if (offset >= length) {
+			DEBUG_ERR_MSG("header field failed, records [%d], offset [%d], length [%d]", records, offset, length);
+			return NET_NFC_BUFFER_TOO_SMALL;
+		}
+
+		/* MB check */
+		if (records == 0 && header->mb == 0) {
+			DEBUG_ERR_MSG("message doesn't begin with mb flag, records [%d], offset [%d], length [%d]", records, offset, length);
+			return NET_NFC_INVALID_FORMAT;
+		}
+
+		if (header->sr == 1) {
+			offset++;
+		} else {
+			offset += 4;
+		}
+
+		if (offset > length) {
+			DEBUG_ERR_MSG("payload length field failed, records [%d], offset [%d], length [%d]", records, offset, length);
+			return NET_NFC_BUFFER_TOO_SMALL;
+		}
+
+		payload_len = GET_PAYLOAD_LEN(header);
+
+		/* id */
+		id_len = 0;
+		if (header->il == true) {
+			id_len = buffer[offset++];
+
+			if (offset >= length) {
+				DEBUG_ERR_MSG("id length field failed, records [%d], offset [%d], length [%d]", records, offset, length);
+				return NET_NFC_BUFFER_TOO_SMALL;
+			}
+		}
+
+		/* calc data len */
+		offset += header->type_len + id_len + payload_len;
+		if (offset > length) {
+			DEBUG_ERR_MSG("data fields failed, records [%d], offset [%d], length [%d]", records, offset, length);
+			return NET_NFC_BUFFER_TOO_SMALL;
+		}
+
+		records++;
+
+		if (header->me == 1) {
+			break;
+		}
+	}
+
+	if (header != NULL && header->me == 0) {
+		DEBUG_ERR_MSG("me field is not set, records [%d], offset [%d], length [%d]", records, offset, length);
+		return NET_NFC_NDEF_BUF_END_WITHOUT_ME;
+	}
+
+	if (offset < length) {
+		DEBUG_ERR_MSG("remain more buffer, records [%d], offset [%d], length [%d]", records, offset, length);
+		return NET_NFC_OUT_OF_BOUND;
+	}
+
+	return NET_NFC_OK;
+}
 
 net_nfc_error_e net_nfc_util_convert_rawdata_to_ndef_message(data_s *rawdata, ndef_message_s *ndef)
 {
@@ -418,9 +516,7 @@ uint32_t net_nfc_util_get_ndef_message_length(ndef_message_s *message)
 	int total = 0;
 
 	if (message == NULL)
-	{
-		return NET_NFC_NULL_PARAMETER;
-	}
+		return 0;
 
 	current = message->records;
 
@@ -429,8 +525,6 @@ uint32_t net_nfc_util_get_ndef_message_length(ndef_message_s *message)
 		total += net_nfc_util_get_record_length(current);
 		current = current->next;
 	}
-
-	DEBUG_MSG("total byte length = [%d]", total);
 
 	return total;
 }
@@ -473,7 +567,7 @@ void net_nfc_util_print_ndef_message(ndef_message_s *msg)
 		{
 			memcpy(buffer, current->id_s.buffer, current->id_s.length);
 			buffer[current->id_s.length] = '\0';
-			DEBUG_MSG("ID: %s\n", buffer);
+			SECURE_LOGD("ID: %s\n", buffer);
 		}
 		if (current->payload_s.buffer != NULL)
 		{
@@ -521,12 +615,14 @@ net_nfc_error_e net_nfc_util_free_ndef_message(ndef_message_s *msg)
 
 net_nfc_error_e net_nfc_util_create_ndef_message(ndef_message_s **ndef_message)
 {
-	if (ndef_message == NULL)
-	{
+	if (ndef_message == NULL) {
 		return NET_NFC_NULL_PARAMETER;
 	}
 
 	_net_nfc_util_alloc_mem(*ndef_message, sizeof(ndef_message_s));
+	if (*ndef_message == NULL) {
+		return NET_NFC_ALLOC_FAIL;
+	}
 
 	return NET_NFC_OK;
 }
@@ -652,7 +748,7 @@ net_nfc_error_e net_nfc_util_append_record_by_index(ndef_message_s *ndef_message
 net_nfc_error_e net_nfc_util_search_record_by_type(ndef_message_s *ndef_message, net_nfc_record_tnf_e tnf, data_s *type, ndef_record_s **record)
 {
 	int idx = 0;
-	ndef_record_s *record_private;
+	ndef_record_s *tmp_record;
 	uint32_t type_length;
 	uint8_t *buf;
 
@@ -675,27 +771,27 @@ net_nfc_error_e net_nfc_util_search_record_by_type(ndef_message_s *ndef_message,
 		}
 	}
 
-	record_private = ndef_message->records;
+	tmp_record = ndef_message->records;
 
 	for (; idx < ndef_message->recordCount; idx++)
 	{
-		if (record_private == NULL)
+		if (tmp_record == NULL)
 		{
 			*record = NULL;
 
 			return NET_NFC_INVALID_FORMAT;
 		}
 
-		if (record_private->TNF == tnf &&
-			type_length == record_private->type_s.length &&
-			memcmp(buf, record_private->type_s.buffer, type_length) == 0)
+		if (tmp_record->TNF == tnf &&
+			type_length == tmp_record->type_s.length &&
+			memcmp(buf, tmp_record->type_s.buffer, type_length) == 0)
 		{
-			*record = record_private;
+			*record = tmp_record;
 
 			return NET_NFC_OK;
 		}
 
-		record_private = record_private->next;
+		tmp_record = tmp_record->next;
 	}
 
 	return NET_NFC_NO_DATA_FOUND;
@@ -793,3 +889,20 @@ static net_nfc_error_e __net_nfc_repair_record_flags(ndef_message_s *ndef_messag
 	return NET_NFC_OK;
 }
 
+void net_nfc_util_foreach_ndef_records(ndef_message_s *msg,
+	net_nfc_foreach_ndef_records_cb func, void *user_data)
+{
+	ndef_record_s *record;
+
+	if (msg == NULL || func == NULL)
+		return;
+
+	record = msg->records;
+
+	while (record != NULL) {
+		func(record, user_data);
+
+		record = record->next;
+	}
+
+}

@@ -17,5 +17,5 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "net_nfc_client_util_private.h"
+#include "net_nfc_client_util_internal.h"
 

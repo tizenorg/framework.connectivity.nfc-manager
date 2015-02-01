@@ -18,302 +18,474 @@
 #include <glib.h>
 
 #include "vconf.h"
+#ifdef SECURITY_SERVER
+#include "security-server.h"
+#endif
 
-#include "net_nfc_debug_private.h"
-#include "net_nfc_util_private.h"
+#include "net_nfc_manager.h"
+#include "net_nfc_debug_internal.h"
+#include "net_nfc_util_internal.h"
 #include "net_nfc_util_defines.h"
-#include "net_nfc_server_context_private.h"
+#include "net_nfc_app_util_internal.h"
+#include "net_nfc_util_gdbus_internal.h"
+#include "net_nfc_server.h"
+#include "net_nfc_server_context_internal.h"
 
-static GList *g_client_contexts = NULL;
-static pthread_mutex_t g_client_context_lock = PTHREAD_MUTEX_INITIALIZER;
 
-static gint _client_context_compare_by_socket(gconstpointer a, gconstpointer b)
+static GHashTable *client_contexts;
+static pthread_mutex_t context_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void _cleanup_client_key(gpointer data)
 {
-	gint result = -1;
-	net_nfc_client_info_t *info = (net_nfc_client_info_t *)a;
-
-	if (info->socket == (int)b)
-		result = 0;
-	else
-		result = 1;
-
-	return result;
-}
-
-static gint _client_context_compare_by_pgid(gconstpointer a, gconstpointer b)
-{
-	gint result = -1;
-	net_nfc_client_info_t *info = (net_nfc_client_info_t *)a;
-
-	if (info->pgid == (pid_t)b)
-		result = 0;
-	else
-		result = 1;
-
-	return result;
+	if (data != NULL)
+	{
+		g_free(data);
+	}
 }
 
 static void _cleanup_client_context(gpointer data)
 {
-	net_nfc_client_info_t *info = data;
-
-	if (info != NULL)
+	if (data != NULL)
 	{
-		if (info->channel != NULL)
-		{
-			g_io_channel_unref(info->channel);
-		}
-
-		/* need to check . is it necessary to remove g_source_id */
-		if (info->src_id > 0)
-		{
-			g_source_remove(info->src_id);
-		}
-
-		if (info->socket > 0)
-		{
-			shutdown(info->socket, SHUT_RDWR);
-			close(info->socket);
-		}
-
-		DEBUG_SERVER_MSG("cleanup success : client [%d]", info->socket);
-
-		_net_nfc_util_free_mem(info);
+		g_free(data);
 	}
 }
 
-void net_nfc_server_deinit_client_context()
+void net_nfc_server_gdbus_init_client_context()
 {
-	pthread_mutex_lock(&g_client_context_lock);
+	pthread_mutex_lock(&context_lock);
 
-	g_list_free_full(g_client_contexts, _cleanup_client_context);
+	if (client_contexts == NULL) {
+		client_contexts = g_hash_table_new_full(g_str_hash, g_str_equal,
+			_cleanup_client_key, _cleanup_client_context);
+	}
 
-	pthread_mutex_unlock(&g_client_context_lock);
+	pthread_mutex_unlock(&context_lock);
 }
 
-int net_nfc_server_get_client_count()
+void net_nfc_server_gdbus_deinit_client_context()
 {
-	int result = 0;
+	pthread_mutex_lock(&context_lock);
 
-	pthread_mutex_lock(&g_client_context_lock);
+	if (client_contexts != NULL) {
+		g_hash_table_destroy(client_contexts);
+		client_contexts = NULL;
+	}
 
-	result = g_list_length(g_client_contexts);
+	pthread_mutex_unlock(&context_lock);
+}
 
-	pthread_mutex_unlock(&g_client_context_lock);
+/* TODO */
+bool net_nfc_server_gdbus_check_privilege(GDBusMethodInvocation *invocation,
+	GVariant *privilege,
+	const char *object,
+	const char *right)
+{
+#ifdef SECURITY_SERVER
+	data_s priv = { NULL, 0 };
+	int result;
+
+	if (privilege == NULL || object == NULL || right == NULL) {
+		return false;
+	}
+
+	net_nfc_util_gdbus_variant_to_data_s(privilege, &priv);
+
+	INFO_MSG("check cookie  size  [%d]",priv.length);
+
+	result = security_server_check_privilege_by_cookie((char *)priv.buffer,
+			object, right);
+
+	INFO_MSG("check security server result  [%d]",result);
+
+	net_nfc_util_clear_data(&priv);
+
+	if (result < 0) {
+		DEBUG_ERR_MSG("permission denied : \"%s\", \"%s\"", object, right);
+
+		return false;
+	}
+#endif
+	const char *id = g_dbus_method_invocation_get_sender(invocation);
+
+	INFO_MSG("check the id of the gdbus sender =  [%s]",id);
+
+	net_nfc_server_gdbus_add_client_context(id,
+			NET_NFC_CLIENT_ACTIVE_STATE);
+
+	return true;
+}
+
+size_t net_nfc_server_gdbus_get_client_count_no_lock()
+{
+	return g_hash_table_size(client_contexts);
+}
+
+size_t net_nfc_server_gdbus_get_client_count()
+{
+	size_t result;
+
+	pthread_mutex_lock(&context_lock);
+
+	result = net_nfc_server_gdbus_get_client_count_no_lock();
+
+	pthread_mutex_unlock(&context_lock);
 
 	return result;
 }
 
-net_nfc_client_info_t *net_nfc_server_get_client_context(int socket)
+net_nfc_client_context_info_t *net_nfc_server_gdbus_get_client_context_no_lock(
+	const char *id)
 {
-	net_nfc_client_info_t *result = NULL;
-	GList *item = NULL;
+	net_nfc_client_context_info_t *result;
 
-	pthread_mutex_lock(&g_client_context_lock);
-
-	item = g_list_find_custom(g_client_contexts, (gconstpointer)socket, _client_context_compare_by_socket);
-	if (item != NULL)
-	{
-		result = item->data;
-	}
-
-	pthread_mutex_unlock(&g_client_context_lock);
+	result = g_hash_table_lookup(client_contexts, id);
 
 	return result;
 }
 
-void net_nfc_server_add_client_context(pid_t pid, int socket, GIOChannel *channel, uint32_t src_id, client_state_e state)
+net_nfc_client_context_info_t *net_nfc_server_gdbus_get_client_context(
+	const char *id)
 {
-	DEBUG_SERVER_MSG("add client context");
+	net_nfc_client_context_info_t *result;
 
-	if (net_nfc_server_get_client_context(socket) == NULL)
+	pthread_mutex_lock(&context_lock);
+
+	result = net_nfc_server_gdbus_get_client_context_no_lock(id);
+
+	pthread_mutex_unlock(&context_lock);
+
+	return result;
+}
+
+void net_nfc_server_gdbus_add_client_context(const char *id,
+	client_state_e state)
+{
+	pthread_mutex_lock(&context_lock);
+
+	if (net_nfc_server_gdbus_get_client_context_no_lock(id) == NULL)
 	{
-		net_nfc_client_info_t *info = NULL;
+		net_nfc_client_context_info_t *info = NULL;
 
-		pthread_mutex_lock(&g_client_context_lock);
-
-		_net_nfc_util_alloc_mem(info, sizeof(net_nfc_client_info_t));
+		info = g_new0(net_nfc_client_context_info_t, 1);
 		if (info != NULL)
 		{
+			pid_t pid;
+
+			pid = net_nfc_server_gdbus_get_pid(id);
+			DEBUG_SERVER_MSG("added client id : [%s], pid [%d]", id, pid);
+
 			info->pid = pid;
 			info->pgid = getpgid(pid);
-			info->socket = socket;
-			info->channel = channel;
-			info->src_id = src_id;
 			info->state = state;
 			info->launch_popup_state = NET_NFC_LAUNCH_APP_SELECT;
+			info->launch_popup_state_no_check = NET_NFC_LAUNCH_APP_SELECT;
+			info->isTransactionFgDispatch = false;
 
-			g_client_contexts = g_list_append(g_client_contexts, info);
+			g_hash_table_insert(client_contexts,
+				(gpointer)g_strdup(id),
+				(gpointer)info);
+
+			DEBUG_SERVER_MSG("current client count = [%d]",
+				net_nfc_server_gdbus_get_client_count_no_lock());
 		}
 		else
 		{
 			DEBUG_ERR_MSG("alloc failed");
 		}
-
-		pthread_mutex_unlock(&g_client_context_lock);
 	}
 	else
 	{
-		DEBUG_ERR_MSG("client exists already [%d]", socket);
+		INFO_MSG("we already have this client in our context!!");
 	}
 
-	DEBUG_SERVER_MSG("current client count = [%d]", g_list_length(g_client_contexts));
+	pthread_mutex_unlock(&context_lock);
 }
 
-void net_nfc_server_cleanup_client_context(int socket)
+void net_nfc_server_gdbus_cleanup_client_context(const char *id)
 {
-	GList *item = NULL;
+	net_nfc_client_context_info_t *info;
 
-	DEBUG_SERVER_MSG("clean up client context");
+	pthread_mutex_lock(&context_lock);
 
-	pthread_mutex_lock(&g_client_context_lock);
-
-	item = g_list_find_custom(g_client_contexts, (gconstpointer)socket, _client_context_compare_by_socket);
-	if (item != NULL)
+	info = net_nfc_server_gdbus_get_client_context_no_lock(id);
+	if (info != NULL)
 	{
-		_cleanup_client_context(item->data);
+		DEBUG_SERVER_MSG("clean up client context, [%s, %d]", id,
+			info->pid);
 
-		g_client_contexts = g_list_delete_link(g_client_contexts, item);
+		g_hash_table_remove(client_contexts, id);
+
+		DEBUG_SERVER_MSG("current client count = [%d]",
+			net_nfc_server_gdbus_get_client_count_no_lock());
+
+//		/* TODO : exit when no client */
+//		if (net_nfc_server_gdbus_get_client_count_no_lock() == 0)
+//		{
+//			/* terminate service */
+//			net_nfc_manager_quit();
+//		}
 	}
 
-	pthread_mutex_unlock(&g_client_context_lock);
-
-	DEBUG_SERVER_MSG("current client count = [%d]", g_list_length(g_client_contexts));
+	pthread_mutex_unlock(&context_lock);
 }
 
-void net_nfc_server_for_each_client_context(net_nfc_server_for_each_client_cb cb, void *user_param)
+void net_nfc_server_gdbus_for_each_client_context(
+	net_nfc_server_gdbus_for_each_client_cb cb,
+	void *user_param)
 {
-	GList *item = NULL;
+	GHashTableIter iter;
+	char *id;
+	net_nfc_client_context_info_t *info;
 
-	pthread_mutex_lock(&g_client_context_lock);
-	item = g_list_first(g_client_contexts);
-	while (item != NULL)
-	{
-		if (cb != NULL)
-		{
-			cb(item->data, user_param);
+	if (cb == NULL)
+		return;
+
+	pthread_mutex_lock(&context_lock);
+
+	g_hash_table_iter_init(&iter, client_contexts);
+	while (g_hash_table_iter_next(&iter, (gpointer *)&id,
+		(gpointer *)&info) == true) {
+		cb(info, user_param);
+	}
+
+	pthread_mutex_unlock(&context_lock);
+}
+
+bool net_nfc_server_gdbus_check_client_is_running(const char *id)
+{
+	return (net_nfc_server_gdbus_get_client_context(id) != NULL);
+}
+
+client_state_e net_nfc_server_gdbus_get_client_state(const char *id)
+{
+	net_nfc_client_context_info_t *info;
+	client_state_e state = NET_NFC_CLIENT_INACTIVE_STATE;
+
+	pthread_mutex_lock(&context_lock);
+
+	info = net_nfc_server_gdbus_get_client_context_no_lock(id);
+	if (info != NULL) {
+		state = info->state;
+	}
+
+	pthread_mutex_unlock(&context_lock);
+
+	return state;
+}
+
+void net_nfc_server_gdbus_set_client_state(const char *id, client_state_e state)
+{
+	net_nfc_client_context_info_t *info;
+
+	pthread_mutex_lock(&context_lock);
+
+	info = net_nfc_server_gdbus_get_client_context_no_lock(id);
+	if (info != NULL) {
+		info->state = state;
+	}
+
+	pthread_mutex_unlock(&context_lock);
+}
+
+void net_nfc_server_gdbus_set_launch_state(const char *id,
+	net_nfc_launch_popup_state_e popup_state,
+	net_nfc_launch_popup_check_e check_foreground)
+{
+	net_nfc_client_context_info_t *info;
+
+	pthread_mutex_lock(&context_lock);
+
+	info = net_nfc_server_gdbus_get_client_context_no_lock(id);
+	if (info != NULL) {
+		if (check_foreground == CHECK_FOREGROUND) {
+			info->launch_popup_state = popup_state;
+		} else {
+			info->launch_popup_state_no_check = popup_state;
 		}
-		item = g_list_next(item);
 	}
-	pthread_mutex_unlock(&g_client_context_lock);
+
+	pthread_mutex_unlock(&context_lock);
 }
 
-#ifndef BROADCAST_MESSAGE
-net_nfc_target_handle_s* net_nfc_server_get_current_client_target_handle(int socket_fd)
+net_nfc_launch_popup_state_e net_nfc_server_gdbus_get_launch_state(
+	const char *id)
 {
-	int i = 0;
+	net_nfc_client_context_info_t *info;
+	net_nfc_launch_popup_state_e result = NET_NFC_LAUNCH_APP_SELECT;
 
-	pthread_mutex_lock(&g_server_socket_lock);
+	pthread_mutex_lock(&context_lock);
 
-	net_nfc_target_handle_s* handle = NULL;
+	info = net_nfc_server_gdbus_get_client_context_no_lock(id);
+	if (info != NULL) {
+		if (info->launch_popup_state_no_check  ==
+			NET_NFC_NO_LAUNCH_APP_SELECT) {
+			result = NET_NFC_NO_LAUNCH_APP_SELECT;
+		} else {
+			result = info->launch_popup_state;
+		}
+	}
 
-	for(; i < NET_NFC_CLIENT_MAX; i++)
+	pthread_mutex_unlock(&context_lock);
+
+	return result;
+}
+
+net_nfc_error_e net_nfc_server_gdbus_set_transaction_fg_dispatch(
+	const char *id,
+	int fgDispatch)
+{
+	net_nfc_client_context_info_t *info;
+	pid_t focus_app_pid;
+	net_nfc_error_e result = NET_NFC_OK;
+
+	focus_app_pid = net_nfc_app_util_get_focus_app_pid();
+
+	pthread_mutex_lock(&context_lock);
+
+	info = net_nfc_server_gdbus_get_client_context_no_lock(id);
+
+	if(info != NULL)
 	{
-		if(g_client_info[i].socket == socket_fd)
+		if(fgDispatch == true)
 		{
-			handle = g_client_info[i].target_handle;
+			if(info->pgid == focus_app_pid)
+			{
+				info->isTransactionFgDispatch = fgDispatch;
+			}
+			else
+			{
+				result = NET_NFC_INVALID_STATE;
+			}
+		}
+		else
+		{
+			info->isTransactionFgDispatch = fgDispatch;
+		}
+	}
+	else
+	{
+		result = NET_NFC_INVALID_STATE;
+	}
+
+	pthread_mutex_unlock(&context_lock);
+
+	return result;
+}
+
+net_nfc_launch_popup_state_e net_nfc_server_gdbus_get_client_popup_state(
+	pid_t pid)
+{
+	GHashTableIter iter;
+	char *id;
+	net_nfc_launch_popup_state_e state = NET_NFC_LAUNCH_APP_SELECT;
+	net_nfc_client_context_info_t *info = NULL, *temp;
+
+	pthread_mutex_lock(&context_lock);
+
+	g_hash_table_iter_init(&iter, client_contexts);
+	while (g_hash_table_iter_next(&iter, (gpointer *)&id,
+		(gpointer *)&temp) == true) {
+		if (temp->launch_popup_state_no_check ==
+			NET_NFC_NO_LAUNCH_APP_SELECT) {
+			state = NET_NFC_NO_LAUNCH_APP_SELECT;
+			break;
+		}
+
+		if (temp->pgid == pid) {
+			info = temp;
 			break;
 		}
 	}
 
-	pthread_mutex_unlock(&g_server_socket_lock);
+	if (info != NULL) {
+		state = info->launch_popup_state;
+	}
 
-	return handle;
+	pthread_mutex_unlock(&context_lock);
+
+	return state;
 }
 
-bool net_nfc_server_set_current_client_target_handle(int socket_fd, net_nfc_target_handle_s* handle)
+bool net_nfc_server_gdbus_get_client_transaction_fg_dispatch_state(
+	pid_t pid)
 {
-	int i = 0;
+	GHashTableIter iter;
+	char *id;
+	bool state = false;
+	net_nfc_client_context_info_t *info = NULL, *temp;
 
-	pthread_mutex_lock(&g_server_socket_lock);
+	pthread_mutex_lock(&context_lock);
 
-	for(; i < NET_NFC_CLIENT_MAX; i++)
-	{
-		if(g_client_info[i].socket == socket_fd)
-		{
-			g_client_info[i].target_handle = handle;
-			pthread_mutex_unlock(&g_server_socket_lock);
-			return true;
+	g_hash_table_iter_init(&iter, client_contexts);
+	while (g_hash_table_iter_next(&iter, (gpointer *)&id,
+		(gpointer *)&temp) == true) {
+
+		if (temp->pgid == pid) {
+			info = temp;
+			break;
 		}
 	}
 
-	pthread_mutex_unlock(&g_server_socket_lock);
-	return false;
-}
-#endif
-
-bool net_nfc_server_check_client_is_running(int socket)
-{
-#ifdef BROADCAST_MESSAGE
-	return (net_nfc_server_get_client_context(socket) != NULL);
-#else
-	int client_fd = *((int *)client_context);
-
-	if(client_fd > 0)
-	return true;
-	else
-	return false;
-#endif
-}
-
-client_state_e net_nfc_server_get_client_state(int socket)
-{
-	GList *item = NULL;
-	client_state_e state = NET_NFC_CLIENT_INACTIVE_STATE;
-
-	pthread_mutex_lock(&g_client_context_lock);
-
-	item = g_list_find_custom(g_client_contexts, (gconstpointer)socket, _client_context_compare_by_socket);
-	if (item != NULL)
-	{
-		state = ((net_nfc_client_info_t *)item->data)->state;
+	if (info != NULL) {
+		state = info->isTransactionFgDispatch;
 	}
 
-	pthread_mutex_unlock(&g_client_context_lock);
+	pthread_mutex_unlock(&context_lock);
 
 	return state;
 }
 
-void net_nfc_server_set_client_state(int socket, client_state_e state)
+void net_nfc_server_gdbus_increase_se_count(const char *id)
 {
-	GList *item = NULL;
+	net_nfc_client_context_info_t *info;
 
-	pthread_mutex_lock(&g_client_context_lock);
+	pthread_mutex_lock(&context_lock);
 
-	item = g_list_find_custom(g_client_contexts, (gconstpointer)socket, _client_context_compare_by_socket);
-	if (item != NULL)
-	{
-		((net_nfc_client_info_t *)item->data)->state = state;
+	info = net_nfc_server_gdbus_get_client_context_no_lock(id);
+	if (info != NULL) {
+		info->ref_se++;
 	}
 
-	pthread_mutex_unlock(&g_client_context_lock);
+	pthread_mutex_unlock(&context_lock);
 }
 
-void net_nfc_server_set_launch_state(int socket, net_nfc_launch_popup_state_e popup_state)
+void net_nfc_server_gdbus_decrease_se_count(const char *id)
 {
-	net_nfc_client_info_t *context = net_nfc_server_get_client_context(socket);
-	pthread_mutex_lock(&g_client_context_lock);
-	if (context != NULL)
-	{
-		context->launch_popup_state = popup_state;
+	net_nfc_client_context_info_t *info;
+
+	pthread_mutex_lock(&context_lock);
+
+	info = net_nfc_server_gdbus_get_client_context_no_lock(id);
+	if (info != NULL) {
+		info->ref_se--;
 	}
-	pthread_mutex_unlock(&g_client_context_lock);
+
+	pthread_mutex_unlock(&context_lock);
 }
 
-net_nfc_launch_popup_state_e net_nfc_server_get_client_popup_state(pid_t pid)
+bool net_nfc_server_gdbus_is_server_busy()
 {
-	GList *item = NULL;
-	net_nfc_launch_popup_state_e state = NET_NFC_LAUNCH_APP_SELECT;
+	bool result = false;
 
-	pthread_mutex_lock(&g_client_context_lock);
+	pthread_mutex_lock(&context_lock);
 
-	item = g_list_find_custom(g_client_contexts, (gconstpointer)pid, _client_context_compare_by_pgid);
-	if (item != NULL)
-	{
-		state = ((net_nfc_client_info_t *)item->data)->launch_popup_state;
+	if (g_hash_table_size(client_contexts) > 0) {
+		GHashTableIter iter;
+		char *id;
+		net_nfc_client_context_info_t *info;
+
+		g_hash_table_iter_init(&iter, client_contexts);
+		while (g_hash_table_iter_next(&iter, (gpointer *)&id,
+			(gpointer *)&info) == true) {
+			if (info->ref_se > 0) {
+				result = true;
+				break;
+			}
+		}
 	}
 
-	pthread_mutex_unlock(&g_client_context_lock);
+	pthread_mutex_unlock(&context_lock);
 
-	return state;
+	return result;
 }

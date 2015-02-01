@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://tizen.org/ns/packages"
+	package="nfc-manager"
+	version="0.1.0"
+	install-location="internal-only"
+	type="rpm">
+	<label>NFC Manager</label>
+	<author email="constant.lee@samsung.com" href="www.samsung.com">Sangsoo Lee</author>
+	<author email="sungjae.lim@samsung.com" href="www.samsung.com">Sungjae Lim</author>
+	<description>NFC manager</description>
+	<ui-application appid="nfc-manager"
+		exec="/usr/bin/nfc-manager-daemon"
+		nodisplay="true"
+		multiple="false"
+		type="capp"
+		taskmanage="false"
+		mainapp="true">
+		<label>NFC Manager</label>
+	</ui-application>
+</manifest>

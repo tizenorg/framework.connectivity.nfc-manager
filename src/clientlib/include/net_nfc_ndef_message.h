@@ -1,19 +1,18 @@
 /*
-  * Copyright (c) 2012, 2013 Samsung Electronics Co., Ltd.
-  *
-  * Licensed under the Flora License, Version 1.1 (the "License");
-  * you may not use this file except in compliance with the License.
-  * You may obtain a copy of the License at
-
-  *     http://floralicense.org/license/
-  *
-  * Unless required by applicable law or agreed to in writing, software
-  * distributed under the License is distributed on an "AS IS" BASIS,
-  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  * See the License for the specific language governing permissions and
-  * limitations under the License.
-  */
-
+ * Copyright (c) 2012, 2013 Samsung Electronics Co., Ltd.
+ *
+ * Licensed under the Flora License, Version 1.1 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://floralicense.org/license/
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #ifndef __NET_NFC_NDEF_MESSAGE_H__
 #define __NET_NFC_NDEF_MESSAGE_H__
@@ -21,7 +20,7 @@
 #include "net_nfc_typedef.h"
 
 #ifdef __cplusplus
- extern "C" {
+extern "C" {
 #endif
 
 
@@ -73,7 +72,7 @@
 */
 
 
-net_nfc_error_e net_nfc_create_ndef_message (ndef_message_h* ndef_message);
+net_nfc_error_e net_nfc_create_ndef_message(ndef_message_h *ndef_message);
 
 /**
 	this APIs is the getter of  record counts
@@ -110,7 +109,7 @@ net_nfc_error_e net_nfc_create_ndef_message (ndef_message_h* ndef_message);
 	}
 	@endcode
 */
-net_nfc_error_e net_nfc_get_ndef_message_record_count (ndef_message_h ndef_message, int * count);
+net_nfc_error_e net_nfc_get_ndef_message_record_count(ndef_message_h ndef_message, int *count);
 
 /**
 	This function converts the NDEF Message structure to serial bytes of ndef message.
@@ -165,7 +164,7 @@ net_nfc_error_e net_nfc_get_ndef_message_record_count (ndef_message_h ndef_messa
 
 */
 
-net_nfc_error_e net_nfc_create_rawdata_from_ndef_message (ndef_message_h ndef_message, data_h* rawdata);
+net_nfc_error_e net_nfc_create_rawdata_from_ndef_message(ndef_message_h ndef_message, data_h *rawdata);
 
 /**
 	This function return the structure of ndef_message from serial format of ndef message.
@@ -219,7 +218,7 @@ net_nfc_error_e net_nfc_create_rawdata_from_ndef_message (ndef_message_h ndef_me
 */
 
 
-net_nfc_error_e net_nfc_create_ndef_message_from_rawdata (ndef_message_h* ndef_message, data_h  rawdata);
+net_nfc_error_e net_nfc_create_ndef_message_from_rawdata(ndef_message_h *ndef_message, data_h rawdata);
 
 /**
 	it returns the total size of ndef message bytes. parse the structure data and count the bytes
@@ -240,7 +239,7 @@ net_nfc_error_e net_nfc_create_ndef_message_from_rawdata (ndef_message_h* ndef_m
 
 */
 
-net_nfc_error_e net_nfc_get_ndef_message_byte_length(ndef_message_h ndef_message, uint32_t *length) ;
+net_nfc_error_e net_nfc_get_ndef_message_byte_length(ndef_message_h ndef_message, uint32_t *length);
 /**
 	Append a record to ndef message structure.
 	This API help to create NDEF message and it control Record flags to follow the NDEF forum specification
@@ -309,7 +308,7 @@ net_nfc_error_e net_nfc_append_record_to_ndef_message(ndef_message_h ndef_messag
 
 */
 
-net_nfc_error_e net_nfc_remove_record_by_index (ndef_message_h ndef_message, int index);
+net_nfc_error_e net_nfc_remove_record_by_index(ndef_message_h ndef_message, int index);
 
 /**
 	get record by index. this function just return the pointer of record.
@@ -328,7 +327,7 @@ net_nfc_error_e net_nfc_remove_record_by_index (ndef_message_h ndef_message, int
 	@exception NET_NFC_OUT_OF_BOUND			index is out of bound
 
 */
-net_nfc_error_e net_nfc_get_record_by_index (ndef_message_h ndef_message, int index, ndef_record_h*  record);
+net_nfc_error_e net_nfc_get_record_by_index(ndef_message_h ndef_message, int index, ndef_record_h *record);
 
 /**
 	Add a record by index. This API help to add record by index. MB or ME bits will automatically assained.
@@ -347,7 +346,7 @@ net_nfc_error_e net_nfc_get_record_by_index (ndef_message_h ndef_message, int in
 	@exception NET_NFC_INVALID_FORMAT		Wrong formatted ndef message
 */
 
-net_nfc_error_e net_nfc_append_record_by_index (ndef_message_h ndef_message,int index, ndef_record_h  record);
+net_nfc_error_e net_nfc_append_record_by_index(ndef_message_h ndef_message, int index, ndef_record_h record);
 
 
 /**
@@ -390,7 +389,7 @@ net_nfc_error_e net_nfc_append_record_by_index (ndef_message_h ndef_message,int 
 	@endcode
 
 */
-net_nfc_error_e net_nfc_search_record_by_type (ndef_message_h ndef_message, net_nfc_record_tnf_e tnf, data_h type, ndef_record_h * record);
+net_nfc_error_e net_nfc_search_record_by_type(ndef_message_h ndef_message, net_nfc_record_tnf_e tnf, data_h type, ndef_record_h *record);
 
 
 /**
@@ -431,7 +430,7 @@ net_nfc_error_e net_nfc_free_ndef_message(ndef_message_h ndef_message);
 
 */
 
-net_nfc_error_e net_nfc_retrieve_current_ndef_message (ndef_message_h* ndef_message);
+net_nfc_error_e net_nfc_retrieve_current_ndef_message(ndef_message_h *ndef_message);
 
 
 /**
@@ -442,6 +441,4 @@ net_nfc_error_e net_nfc_retrieve_current_ndef_message (ndef_message_h* ndef_mess
 }
 #endif
 
-
-#endif
-
+#endif //__NET_NFC_NDEF_MESSAGE_H__
