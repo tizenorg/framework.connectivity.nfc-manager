@@ -1,783 +1,2144 @@
 /*
-  * Copyright 2012  Samsung Electronics Co., Ltd
-  *
-  * Licensed under the Flora License, Version 1.0 (the "License");
-  * you may not use this file except in compliance with the License.
-  * You may obtain a copy of the License at
+ * Copyright (c) 2012, 2013 Samsung Electronics Co., Ltd.
+ *
+ * Licensed under the Flora License, Version 1.1 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://floralicense.org/license/
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-  *     http://www.tizenopensource.org/license
-  *
-  * Unless required by applicable law or agreed to in writing, software
-  * distributed under the License is distributed on an "AS IS" BASIS,
-  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  * See the License for the specific language governing permissions and
-  * limitations under the License.
-  */
-
-
-#include <glib.h>
-#include <pthread.h>
-
-#include "net_nfc_llcp.h"
-#include "net_nfc_typedef_private.h"
-#include "net_nfc_util_private.h"
-#include "net_nfc_debug_private.h"
-#include "net_nfc_client_ipc_private.h"
-#include "net_nfc_client_util_private.h"
+#include "net_nfc_typedef_internal.h"
+#include "net_nfc_debug_internal.h"
+#include "net_nfc_util_internal.h"
+#include "net_nfc_util_gdbus_internal.h"
+#include "net_nfc_gdbus.h"
+#include "net_nfc_client.h"
+#include "net_nfc_client_manager.h"
+#include "net_nfc_client_llcp.h"
 
 #ifndef NET_NFC_EXPORT_API
 #define NET_NFC_EXPORT_API __attribute__((visibility("default")))
 #endif
 
-GList * socket_list = NULL;
+typedef struct _LlcpFuncData LlcpFuncData;
 
-/*
-	Concept of the llcp_lock
-	1. this lock protects only between client thread (these are calling llcp apis) and callback thread queue (=dispatcher thread)
-	2. dispatcher thread is always serial it does not have to protect itself.
-	3. all internal function for example __free_socket_info, __socket_equal_to are used only inside of this file
-	(there is no way to access from client api) thread safe.
-	4. if the internal function calles from other thread (or changed to public) then you should consider use lock
-*/
-static pthread_mutex_t llcp_lock = PTHREAD_MUTEX_INITIALIZER;
-
-/* to share client info */
-unsigned int socket_handle = 0; /* to generate client socket handle */
-static net_nfc_target_handle_s * current_target = NULL;
-
-static net_nfc_llcp_config_info_s local_config = { 128, 1, 10, 0 };
-static net_nfc_llcp_config_info_s remote_config = { 128, 1, 10, 0 };
-
-/* =============================================================== */
-/* Socket info util */
-
-static void __free_socket_info(net_nfc_llcp_internal_socket_s * data)
+struct _LlcpFuncData
 {
-	net_nfc_llcp_internal_socket_s * socket_info = (net_nfc_llcp_internal_socket_s *)data;
+	gpointer callback;
+	gpointer user_data;
+};
 
-	if (socket_info == NULL)
+static NetNfcGDbusLlcp *llcp_proxy = NULL;
+static net_nfc_llcp_config_info_s llcp_config = { 128, 0, 0, 1 };
+static net_nfc_target_handle_s *llcp_handle = NULL;
+static GList *socket_data_list = NULL;
+static guint socket_handle = 0;
+
+
+void llcp_socket_data_append(net_nfc_llcp_internal_socket_s *socket_data);
+
+void llcp_socket_data_remove(net_nfc_llcp_internal_socket_s *socket_data);
+
+net_nfc_llcp_internal_socket_s *llcp_socket_data_find
+						(net_nfc_llcp_socket_t socket);
+
+/* aysnc callback */
+static void llcp_call_config(GObject *source_object,
+			GAsyncResult *res,
+			gpointer user_data);
+
+static void llcp_call_listen(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data);
+
+static void llcp_call_connect(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data);
+
+static void llcp_call_connect_sap(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data);
+
+static void llcp_call_send(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data);
+
+static void llcp_call_send_to(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data);
+
+static void llcp_call_receive(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data);
+
+static void llcp_call_receive_from(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data);
+
+static void llcp_call_close(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data);
+
+static void llcp_call_disconnect(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data);
+
+/* signal callback */
+static void llcp_error(NetNfcGDbusLlcp *object,
+	guint arg_handle,
+	guint client_socket,
+	gint error,
+	gpointer user_data);
+
+static void llcp_incoming(NetNfcGDbusLlcp *object,
+	guint arg_handle,
+	guint client_socket,
+	guint incoming_socket,
+	gpointer user_data);
+
+void llcp_socket_data_append(net_nfc_llcp_internal_socket_s *socket_data)
+{
+	if (socket_data_list == NULL)
 		return;
-	_net_nfc_client_util_free_mem(socket_info->service_name);
-	_net_nfc_client_util_free_mem(socket_info);
-}
 
-static int __socket_equal_to(gconstpointer key1, gconstpointer key2)
-{
-	net_nfc_llcp_internal_socket_s * arg1 = (net_nfc_llcp_internal_socket_s *)key1;
-	net_nfc_llcp_internal_socket_s * arg2 = (net_nfc_llcp_internal_socket_s *)key2;
-
-	if (arg1->client_socket < arg2->client_socket)
+	if (socket_data)
 	{
-		return -1;
-	}
-	else if (arg1->client_socket > arg2->client_socket)
-	{
-		return 1;
-	}
-	else
-	{
-		return 0;
+		socket_data_list = g_list_append(socket_data_list,
+						socket_data);
 	}
 }
 
-net_nfc_llcp_internal_socket_s * _find_internal_socket_info(net_nfc_llcp_socket_t socket)
+void llcp_socket_data_remove(net_nfc_llcp_internal_socket_s *socket_data)
 {
-	net_nfc_llcp_internal_socket_s * inter_socket = NULL;
-	net_nfc_llcp_internal_socket_s temp = { 0 };
-	GList * found = NULL;
+	if (socket_data_list == NULL)
+		return;
 
-	DEBUG_CLIENT_MSG("Socket info search requested with #[ %d ]", socket);
-
-	temp.client_socket = socket;
-
-	if (socket_list != NULL)
+	if (socket_data)
 	{
-		found = g_list_find_custom(socket_list, &temp, __socket_equal_to);
+		socket_data_list = g_list_remove(socket_data_list,
+						socket_data);
+
+		g_free(socket_data->service_name);
+		g_free(socket_data);
 	}
+}
 
-	if (NULL == found)
-	{
-		DEBUG_CLIENT_MSG("ERROR DATA IS NOT FOUND");
+net_nfc_llcp_internal_socket_s *llcp_socket_data_find
+						(net_nfc_llcp_socket_t socket)
+{
+	GList *pos;
+
+	if (socket_data_list == NULL)
 		return NULL;
-	}
-	else
+
+
+	for (pos = g_list_first(socket_data_list); pos ; pos = pos->data)
 	{
-		DEBUG_CLIENT_MSG("socket_info is found address [%X]", found->data);
-		inter_socket = (net_nfc_llcp_internal_socket_s *)found->data;
-	}
+		net_nfc_llcp_internal_socket_s *data;
 
-	return inter_socket;
-}
+		data = pos->data;
+		if (data == NULL)
+			continue;
 
-static int __socket_equal_to_by_oal(gconstpointer key1, gconstpointer key2)
-{
-	net_nfc_llcp_internal_socket_s * arg1 = (net_nfc_llcp_internal_socket_s *)key1;
-	net_nfc_llcp_internal_socket_s * arg2 = (net_nfc_llcp_internal_socket_s *)key2;
-
-	if (arg1->oal_socket < arg2->oal_socket)
-	{
-		return -1;
-	}
-	else if (arg1->oal_socket > arg2->oal_socket)
-	{
-		return 1;
-	}
-	else
-	{
-		return 0;
-	}
-}
-
-static void __socket_foreach(gpointer data, gpointer user_data)
-{
-	__free_socket_info((net_nfc_llcp_internal_socket_s *)data);
-}
-
-void _net_nfc_llcp_close_all_socket()
-{
-	pthread_mutex_lock(&llcp_lock);
-
-	if (socket_list != NULL)
-	{
-		g_list_foreach(socket_list, __socket_foreach, NULL);
-		g_list_free(socket_list);
+		if (data->client_socket == socket)
+			break;
 	}
 
-	socket_list = NULL;
-
-	pthread_mutex_unlock(&llcp_lock);
-}
-
-net_nfc_llcp_internal_socket_s * _find_internal_socket_info_by_oal_socket(net_nfc_llcp_socket_t socket)
-{
-	net_nfc_llcp_internal_socket_s * inter_socket = NULL;
-	net_nfc_llcp_internal_socket_s temp = { 0 };
-	GList * found = NULL;
-
-	temp.oal_socket = socket;
-
-	DEBUG_CLIENT_MSG("search by oal socket is called socket[ %d ] ", socket);
-
-	if (socket_list != NULL)
-	{
-		found = g_list_find_custom(socket_list, &temp, __socket_equal_to_by_oal);
-	}
-
-	if (NULL == found)
-	{
-		DEBUG_CLIENT_MSG("ERROR DATA IS NOT FOUND");
+	if (pos == NULL)
 		return NULL;
-	}
-	else
-	{
-		inter_socket = (net_nfc_llcp_internal_socket_s *)found->data;
-		DEBUG_CLIENT_MSG("oal socket_info is found address [%X]", inter_socket);
-	}
 
-	return inter_socket;
+	return pos->data;
 }
 
-void _remove_internal_socket(net_nfc_llcp_internal_socket_s * data)
+static void llcp_call_config(GObject *source_object,
+			GAsyncResult *res,
+			gpointer user_data)
 {
-	pthread_mutex_lock(&llcp_lock);
+	LlcpFuncData *func_data = user_data;
+	net_nfc_error_e result;
+	GError *error = NULL;
 
-	if (data == NULL)
+	g_assert(func_data != NULL);
+
+	if (net_nfc_gdbus_llcp_call_config_finish(
+		NET_NFC_GDBUS_LLCP(source_object),
+		&result,
+		res,
+		&error) == FALSE)
 	{
-		pthread_mutex_unlock(&llcp_lock);
+		DEBUG_ERR_MSG("Can not finish config: %s",
+				error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	if (func_data->callback != NULL)
+	{
+		net_nfc_client_llcp_config_completed callback =
+			(net_nfc_client_llcp_config_completed)func_data->callback;
+
+		callback(result, func_data->user_data);
+	}
+
+	g_free(func_data);
+}
+
+static void llcp_call_listen(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data)
+{
+	LlcpFuncData *func_data = user_data;
+	net_nfc_error_e result;
+	guint32 out_client_socket = -1;
+	GError *error = NULL;
+	guint32 out_oal_socket = -1;
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+
+	g_assert(func_data != NULL);
+
+	if (net_nfc_gdbus_llcp_call_listen_finish(
+		NET_NFC_GDBUS_LLCP(source_object),
+		&result,
+		&out_client_socket,
+		res,
+		&error) == FALSE)
+	{
+		DEBUG_ERR_MSG("Can not finish listen: %s",
+				error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	socket_data = llcp_socket_data_find(out_client_socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("Wrong client socket is returned");
 		return;
 	}
 
-	if (socket_list != NULL)
+	socket_data->oal_socket = out_oal_socket;
+
+	if (func_data->callback != NULL)
 	{
+		net_nfc_client_llcp_listen_completed callback =
+			(net_nfc_client_llcp_listen_completed)func_data->callback;
 
-		socket_list = g_list_remove(socket_list, data);
-	}
-	__free_socket_info(data);
-
-	pthread_mutex_unlock(&llcp_lock);
-}
-
-void _append_internal_socket(net_nfc_llcp_internal_socket_s * data)
-{
-	pthread_mutex_lock(&llcp_lock);
-
-	if (data != NULL)
-	{
-		socket_list = g_list_append(socket_list, data);
+		callback(result, out_client_socket, func_data->user_data);
 	}
 
-	pthread_mutex_unlock(&llcp_lock);
+	/* TODO : release resource when socket is closed */
+//	g_free(func_data);
 }
 
-/* =============================================================== */
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_create_llcp_socket(net_nfc_llcp_socket_t * socket, net_nfc_llcp_socket_option_h options)
+static void llcp_call_accept(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data)
 {
+	LlcpFuncData *func_data = user_data;
+	net_nfc_error_e result;
+	GError *error = NULL;
 
-	net_nfc_llcp_internal_socket_s * socket_data = NULL;
-	net_nfc_llcp_socket_option_s * strct_options = (net_nfc_llcp_socket_option_s *)options;
-	net_nfc_llcp_socket_option_s default_option = {
-		128, 1, NET_NFC_LLCP_SOCKET_TYPE_CONNECTIONORIENTED
-	};
+	g_assert(func_data != NULL);
 
-	DEBUG_CLIENT_MSG("function %s is called", __func__);
-
-	if (socket == NULL)
+	if (net_nfc_gdbus_llcp_call_accept_finish(
+		NET_NFC_GDBUS_LLCP(source_object),
+		&result,
+		res,
+		&error) == FALSE)
 	{
+		DEBUG_ERR_MSG("Can not finish accept: %s",
+				error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	if (func_data->callback != NULL)
+	{
+		net_nfc_client_llcp_accept_completed callback =
+			(net_nfc_client_llcp_accept_completed)func_data->callback;
+
+		callback(result, func_data->user_data);
+	}
+
+	g_free(func_data);
+}
+
+static void llcp_call_reject(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data)
+{
+	LlcpFuncData *func_data = user_data;
+	net_nfc_error_e result;
+	GError *error = NULL;
+
+	g_assert(func_data != NULL);
+
+	if (net_nfc_gdbus_llcp_call_reject_finish(
+		NET_NFC_GDBUS_LLCP(source_object),
+		&result,
+		res,
+		&error) == FALSE)
+	{
+		DEBUG_ERR_MSG("Can not finish reject: %s",
+				error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	if (func_data->callback != NULL)
+	{
+		net_nfc_client_llcp_reject_completed callback =
+			(net_nfc_client_llcp_reject_completed)func_data->callback;
+
+		callback(result, func_data->user_data);
+	}
+
+	g_free(func_data);
+}
+
+static void llcp_call_connect(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data)
+{
+	LlcpFuncData *func_data = user_data;
+	net_nfc_error_e result;
+	guint32 out_client_socket = -1;
+	GError *error = NULL;
+	guint32 out_oal_socket = -1;
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+
+	g_assert(func_data != NULL);
+
+	if (net_nfc_gdbus_llcp_call_connect_finish(
+		NET_NFC_GDBUS_LLCP(source_object),
+		&result,
+		&out_client_socket,
+		res,
+		&error) == FALSE)
+	{
+		DEBUG_ERR_MSG("Can not finish connect: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	socket_data = llcp_socket_data_find(out_client_socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("Wrong client socket is returned");
+		return;
+	}
+
+	socket_data->oal_socket = out_oal_socket;
+
+	if (func_data->callback != NULL)
+	{
+		net_nfc_client_llcp_connect_completed callback =
+			(net_nfc_client_llcp_connect_completed)func_data->callback;
+
+		callback(result, out_client_socket, func_data->user_data);
+	}
+
+	/* TODO : release resource when socket is closed */
+//	g_free(func_data);
+}
+
+static void llcp_call_connect_sap(GObject *source_object,
+				GAsyncResult *res,
+				gpointer user_data)
+{
+	LlcpFuncData *func_data = user_data;
+	net_nfc_error_e result;
+	guint32 out_client_socket = -1;
+	GError *error = NULL;
+	guint32 out_oal_socket = -1;
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+
+	g_assert(func_data != NULL);
+
+	if (net_nfc_gdbus_llcp_call_connect_sap_finish(
+		NET_NFC_GDBUS_LLCP(source_object),
+		&result,
+		&out_client_socket,
+		res,
+		&error) == FALSE)
+	{
+		DEBUG_ERR_MSG("Can not finish connect sap: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	socket_data = llcp_socket_data_find(out_client_socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("Wrong client socket is returned");
+		return;
+	}
+
+	socket_data->oal_socket = out_oal_socket;
+
+	if (func_data->callback != NULL)
+	{
+		net_nfc_client_llcp_connect_sap_completed callback =
+			(net_nfc_client_llcp_connect_sap_completed)func_data->callback;
+
+		callback(result, out_client_socket, func_data->user_data);
+	}
+
+	/* TODO : release resource when socket is closed */
+//	g_free(func_data);
+}
+
+static void llcp_call_send(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data)
+{
+	LlcpFuncData *func_data = user_data;
+	net_nfc_error_e result;
+	guint32 out_client_socket = -1;
+	GError *error = NULL;
+
+	g_assert(func_data != NULL);
+
+	if (net_nfc_gdbus_llcp_call_send_finish(
+		NET_NFC_GDBUS_LLCP(source_object),
+		&result,
+		&out_client_socket,
+		res,
+		&error) == FALSE)
+	{
+		DEBUG_ERR_MSG("Can not finish send: %s",
+			error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	if (func_data->callback != NULL)
+	{
+		net_nfc_client_llcp_send_completed callback =
+			(net_nfc_client_llcp_send_completed)func_data->callback;
+
+		callback(result, func_data->user_data);
+	}
+
+	g_free(func_data);
+}
+
+static void llcp_call_send_to(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data)
+{
+	LlcpFuncData *func_data = user_data;
+	net_nfc_error_e result;
+	guint32 out_client_socket = -1;
+	GError *error = NULL;
+
+	g_assert(func_data != NULL);
+
+	if (net_nfc_gdbus_llcp_call_send_to_finish(
+		NET_NFC_GDBUS_LLCP(source_object),
+		&result,
+		&out_client_socket,
+		res,
+		&error) == FALSE)
+	{
+		DEBUG_ERR_MSG("Can not finish send to: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	if (func_data->callback != NULL)
+	{
+		net_nfc_client_llcp_send_to_completed callback =
+			(net_nfc_client_llcp_send_to_completed)func_data->callback;
+
+		callback(result, func_data->user_data);
+	}
+
+	g_free(func_data);
+}
+
+static void llcp_call_receive(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data)
+{
+	LlcpFuncData *func_data = user_data;
+	net_nfc_error_e result;
+	GVariant *variant = NULL;
+	GError *error = NULL;
+
+	g_assert(func_data != NULL);
+
+	if (net_nfc_gdbus_llcp_call_receive_finish(
+		NET_NFC_GDBUS_LLCP(source_object),
+		&result,
+		&variant,
+		res,
+		&error) == FALSE)
+	{
+		DEBUG_ERR_MSG("Can not finish receive: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	if (func_data->callback != NULL)
+	{
+		net_nfc_client_llcp_receive_completed callback =
+			(net_nfc_client_llcp_receive_completed)func_data->callback;
+		data_s data = { NULL, 0 };
+
+		net_nfc_util_gdbus_variant_to_data_s(variant, &data);
+
+		callback(result, &data, func_data->user_data);
+
+		net_nfc_util_clear_data(&data);
+	}
+
+	g_free(func_data);
+}
+
+static void llcp_call_receive_from(GObject *source_object,
+				GAsyncResult *res,
+				gpointer user_data)
+{
+	LlcpFuncData *func_data = user_data;
+	net_nfc_error_e result;
+	sap_t sap = 0;
+	GVariant *variant = NULL;
+	GError *error = NULL;
+
+	g_assert(func_data != NULL);
+
+	if (net_nfc_gdbus_llcp_call_receive_from_finish(
+		NET_NFC_GDBUS_LLCP(source_object),
+		&result,
+		&sap,
+		&variant,
+		res,
+		&error) == FALSE)
+	{
+		DEBUG_ERR_MSG("Can not finish receive from: %s",
+				error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	if (func_data->callback != NULL)
+	{
+		net_nfc_client_llcp_receive_from_completed callback =
+			(net_nfc_client_llcp_receive_from_completed)func_data->callback;
+		data_s data = { NULL, 0 };
+
+		net_nfc_util_gdbus_variant_to_data_s(variant, &data);
+
+		callback(result, sap, &data, func_data->user_data);
+
+		net_nfc_util_clear_data(&data);
+	}
+
+	g_free(func_data);
+}
+
+static void llcp_call_close(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data)
+{
+	LlcpFuncData *func_data = user_data;
+	net_nfc_error_e result;
+	guint32 out_client_socket = -1;
+	GError *error = NULL;
+
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+
+	g_assert(func_data != NULL);
+
+	if (net_nfc_gdbus_llcp_call_close_finish(
+		NET_NFC_GDBUS_LLCP(source_object),
+		&result,
+		&out_client_socket,
+		res,
+		&error) == FALSE)
+	{
+		DEBUG_ERR_MSG("Can not finish close: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	socket_data = llcp_socket_data_find(out_client_socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("Wrong client socket is returned");
+		return;
+	}
+
+	if (func_data->callback != NULL)
+	{
+		net_nfc_client_llcp_close_completed callback =
+			(net_nfc_client_llcp_close_completed)func_data->callback;
+
+		callback(result, func_data->user_data);
+	}
+
+	g_free(func_data);
+}
+
+static void llcp_call_disconnect(GObject *source_object,
+	GAsyncResult *res,
+	gpointer user_data)
+{
+	LlcpFuncData *func_data = user_data;
+	net_nfc_error_e result;
+	guint32 out_client_socket = -1;
+	GError *error = NULL;
+
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+
+	g_assert(func_data != NULL);
+
+	if (net_nfc_gdbus_llcp_call_disconnect_finish(
+		NET_NFC_GDBUS_LLCP(source_object),
+		&result,
+		&out_client_socket,
+		res,
+		&error) == FALSE)
+	{
+		DEBUG_ERR_MSG("Can not finish disconnect: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	socket_data = llcp_socket_data_find(out_client_socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("Wrong client socket is returned");
+		return;
+	}
+
+	if (func_data->callback != NULL) {
+		net_nfc_client_llcp_disconnect_completed callback =
+			(net_nfc_client_llcp_disconnect_completed)func_data->callback;
+
+		callback(result, func_data->user_data);
+	}
+
+	g_free(func_data);
+}
+
+static void llcp_error(NetNfcGDbusLlcp *object,
+	guint arg_handle,
+	guint client_socket,
+	gint error,
+	gpointer user_data)
+{
+	INFO_MSG(">>> SIGNAL arrived");
+}
+
+static void llcp_incoming(NetNfcGDbusLlcp *object,
+	guint arg_handle,
+	guint client_socket,
+	guint incoming_socket,
+	gpointer user_data)
+{
+	INFO_MSG(">>> SIGNAL arrived");
+}
+
+/* Public APIs */
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_config(net_nfc_llcp_config_info_h config,
+				net_nfc_client_llcp_config_completed callback,
+				void *user_data)
+{
+	LlcpFuncData *func_data;
+	GVariant *variant;
+
+	if (config == NULL) {
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	if (options == NULL)
+	if (llcp_proxy == NULL)
 	{
-		strct_options = &default_option;
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
 	}
 
-	_net_nfc_client_util_alloc_mem(socket_data, sizeof(net_nfc_llcp_internal_socket_s));
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
 
-	socket_data->client_socket = socket_handle++;
-	socket_data->miu = strct_options->miu;
-	socket_data->rw = strct_options->rw;
-	socket_data->type = strct_options->type;
-	socket_data->device_id = current_target;
-	socket_data->close_requested = false;
+	func_data = g_new0(LlcpFuncData, 1);
+	if (func_data == NULL) {
+		DEBUG_ERR_MSG("g_new0 failed");
 
-	_append_internal_socket(socket_data);
+		return NET_NFC_ALLOC_FAIL;
+	}
 
-	*socket = socket_data->client_socket;
+	func_data->callback = (gpointer)callback;
+	func_data->user_data = user_data;
+
+	memcpy(&llcp_config, config, sizeof(net_nfc_llcp_config_info_s));
+
+	variant = g_variant_new("(qqyy)",
+				config->miu,
+				config->wks,
+				config->lto,
+				config->option);
+
+	net_nfc_gdbus_llcp_call_config(llcp_proxy,
+				variant,
+				net_nfc_client_gdbus_get_privilege(),
+				NULL,
+				llcp_call_config,
+				func_data);
 
 	return NET_NFC_OK;
-
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_set_llcp_socket_callback(net_nfc_llcp_socket_t socket, net_nfc_llcp_socket_cb cb, void * user_param)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_config_sync
+					(net_nfc_llcp_config_info_h config)
 {
-	net_nfc_llcp_internal_socket_s * socket_data = NULL;
+	net_nfc_error_e result;
+	GVariant *variant = NULL;
+	GError *error = NULL;
 
-	if (cb == NULL)
+	if (llcp_proxy == NULL)
 	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	memcpy(&llcp_config, config, sizeof(net_nfc_llcp_config_info_s));
+
+	variant = g_variant_new("(qqyy)",
+				config->miu,
+				config->wks,
+				config->lto,
+				config->option);
+
+	if (net_nfc_gdbus_llcp_call_config_sync(llcp_proxy,
+		variant,
+		net_nfc_client_gdbus_get_privilege(),
+		&result,
+		NULL,
+		&error) == FALSE)
+	{
+		DEBUG_ERR_MSG("can not config: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	return result;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_get_config
+					(net_nfc_llcp_config_info_h *config)
+{
+	if (config == NULL)
+		return NET_NFC_NULL_PARAMETER;
+
+	*config = (net_nfc_llcp_config_info_h)&llcp_config;
+
+	return NET_NFC_OK;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_listen(net_nfc_llcp_socket_t socket,
+				const char *service_name,
+				sap_t sap,
+				net_nfc_client_llcp_listen_completed callback,
+				void *user_data)
+{
+	LlcpFuncData *func_data;
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+
+	if (llcp_proxy == NULL)
+	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
+		return NET_NFC_LLCP_INVALID_SOCKET;
+	}
+
+	/* FIXME: temporary typecast to (uint8_t *) */
+	socket_data->service_name = (uint8_t *)g_strdup(service_name);
+	socket_data->sap = sap;
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	func_data = g_new0(LlcpFuncData, 1);
+	if (func_data == NULL) {
+		DEBUG_ERR_MSG("g_new0 failed");
+
+		return NET_NFC_ALLOC_FAIL;
+	}
+
+	func_data->callback = (gpointer)callback;
+	func_data->user_data = user_data;
+
+	net_nfc_gdbus_llcp_call_listen(llcp_proxy,
+				GPOINTER_TO_UINT(llcp_handle),
+				socket_data->client_socket,
+				socket_data->miu,
+				socket_data->rw,
+				socket_data->type,
+				socket_data->sap,
+				service_name,
+				net_nfc_client_gdbus_get_privilege(),
+				NULL,
+				llcp_call_listen,
+				func_data);
+
+	return NET_NFC_OK;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_listen_sync(net_nfc_llcp_socket_t socket,
+					const char *service_name,
+					sap_t sap,
+					net_nfc_llcp_socket_t *out_socket)
+{
+	net_nfc_error_e result;
+	GError *error = NULL;
+	guint32 out_client_socket;
+
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+	net_nfc_llcp_internal_socket_s *out_socket_data = NULL;
+
+	if (out_socket == NULL) {
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	pthread_mutex_lock(&llcp_lock);
-
-	socket_data = _find_internal_socket_info(socket);
-
-	if (socket_data == NULL)
+	if (llcp_proxy == NULL)
 	{
-		pthread_mutex_unlock(&llcp_lock);
-		return NET_NFC_LLCP_INVALID_SOCKET;
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
 	}
-
-	socket_data->cb = cb;
-	socket_data->register_param = user_param;
-
-	pthread_mutex_unlock(&llcp_lock);
-
-	return NET_NFC_OK;
-}
-
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_unset_llcp_socket_callback(net_nfc_llcp_socket_t socket)
-{
-	pthread_mutex_lock(&llcp_lock);
-	net_nfc_llcp_internal_socket_s * socket_data = _find_internal_socket_info(socket);
-
-	if (socket_data == NULL)
-	{
-		pthread_mutex_unlock(&llcp_lock);
-		return NET_NFC_LLCP_INVALID_SOCKET;
-	}
-
-	if (socket_data->cb == NULL)
-	{
-		pthread_mutex_unlock(&llcp_lock);
-		return NET_NFC_NOT_REGISTERED;
-	}
-
-	socket_data->cb = NULL;
-	pthread_mutex_unlock(&llcp_lock);
-
-	return NET_NFC_OK;
-}
-
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_listen_llcp(net_nfc_llcp_socket_t socket, const char *service_name, sap_t sap, void *trans_param)
-{
-	net_nfc_llcp_internal_socket_s *psocket_data = NULL;
-	net_nfc_request_listen_socket_t *request = NULL;
-	net_nfc_error_e ret;
-	int srv_name_count = 0;
-	uint32_t length = 0;
-
-	DEBUG_CLIENT_MSG("function %s is called. socket#[ %d ]", __func__, socket);
 
 	if (service_name == NULL)
 	{
+		DEBUG_ERR_MSG("service_name is empty");
+		return NET_NFC_UNKNOWN_ERROR;
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
+		return NET_NFC_LLCP_INVALID_SOCKET;
+	}
+
+	/* FIXME: temporary typecast to (uint8_t *) */
+	socket_data->service_name = (uint8_t *)g_strdup(service_name);
+	socket_data->sap = sap;
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	if (net_nfc_gdbus_llcp_call_listen_sync(llcp_proxy,
+					GPOINTER_TO_UINT(llcp_handle),
+					socket_data->client_socket,
+					socket_data->miu,
+					socket_data->rw,
+					socket_data->type,
+					socket_data->sap,
+					service_name,
+					net_nfc_client_gdbus_get_privilege(),
+					&result,
+					&out_client_socket,
+					NULL,
+					&error) == true) {
+		out_socket_data = llcp_socket_data_find(out_client_socket);
+		if (out_socket_data == NULL || out_socket_data != socket_data)
+		{
+			DEBUG_ERR_MSG("Wrong client socket is returned");
+			return NET_NFC_UNKNOWN_ERROR;
+		}
+
+//		out_socket_data->oal_socket = out_oal_socket;
+
+		if (out_socket)
+			*out_socket = out_client_socket;
+	} else {
+		DEBUG_ERR_MSG("can not listen: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	return result;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_accept(net_nfc_llcp_socket_t socket,
+	net_nfc_client_llcp_accept_completed callback,
+	void *user_data)
+{
+	LlcpFuncData *func_data;
+
+	if (llcp_proxy == NULL)
+	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	func_data = g_new0(LlcpFuncData, 1);
+	if (func_data == NULL) {
+		DEBUG_ERR_MSG("g_new0 failed");
+
+		return NET_NFC_ALLOC_FAIL;
+	}
+
+	func_data->callback = (gpointer)callback;
+	func_data->user_data = user_data;
+
+	net_nfc_gdbus_llcp_call_accept(llcp_proxy,
+		GPOINTER_TO_UINT(llcp_handle),
+		socket,
+		net_nfc_client_gdbus_get_privilege(),
+		NULL,
+		llcp_call_accept,
+		func_data);
+
+	return NET_NFC_OK;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_accept_sync(net_nfc_llcp_socket_t socket)
+{
+	net_nfc_error_e result;
+	GError *error = NULL;
+
+	if (llcp_proxy == NULL)
+	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	if (net_nfc_gdbus_llcp_call_accept_sync(llcp_proxy,
+		GPOINTER_TO_UINT(llcp_handle),
+		socket,
+		net_nfc_client_gdbus_get_privilege(),
+		&result,
+		NULL,
+		&error) == false) {
+		DEBUG_ERR_MSG("can not connect: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	return result;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_reject(net_nfc_llcp_socket_t socket,
+		net_nfc_client_llcp_reject_completed callback,
+		void *user_data)
+{
+	LlcpFuncData *func_data;
+
+	if (llcp_proxy == NULL)
+	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	func_data = g_new0(LlcpFuncData, 1);
+	if (func_data == NULL) {
+		DEBUG_ERR_MSG("g_new0 failed");
+
+		return NET_NFC_ALLOC_FAIL;
+	}
+
+	func_data->callback = (gpointer)callback;
+	func_data->user_data = user_data;
+
+	net_nfc_gdbus_llcp_call_reject(llcp_proxy,
+		GPOINTER_TO_UINT(llcp_handle),
+		socket,
+		net_nfc_client_gdbus_get_privilege(),
+		NULL,
+		llcp_call_reject,
+		func_data);
+
+	return NET_NFC_OK;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_reject_sync(net_nfc_llcp_socket_t socket)
+{
+	net_nfc_error_e result;
+	GError *error = NULL;
+
+	if (llcp_proxy == NULL)
+	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	if (net_nfc_gdbus_llcp_call_reject_sync(llcp_proxy,
+		GPOINTER_TO_UINT(llcp_handle),
+		socket,
+		net_nfc_client_gdbus_get_privilege(),
+		&result,
+		NULL,
+		&error) == false) {
+		DEBUG_ERR_MSG("can not connect: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	return result;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_connect(net_nfc_llcp_socket_t socket,
+				const char *service_name,
+				net_nfc_client_llcp_connect_completed callback,
+				void *user_data)
+{
+	LlcpFuncData *func_data;
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+
+	if (service_name == NULL) {
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	pthread_mutex_lock(&llcp_lock);
-	psocket_data = _find_internal_socket_info(socket);
-	if (psocket_data == NULL)
+	if (llcp_proxy == NULL)
 	{
-		pthread_mutex_unlock(&llcp_lock);
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
 		return NET_NFC_LLCP_INVALID_SOCKET;
 	}
 
-	srv_name_count = strlen((char *)service_name) + 1;
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
 
-	_net_nfc_client_util_alloc_mem(psocket_data->service_name, srv_name_count);
-	if (psocket_data->service_name == NULL)
-	{
-		pthread_mutex_unlock(&llcp_lock);
+	func_data = g_new0(LlcpFuncData, 1);
+	if (func_data == NULL) {
+		DEBUG_ERR_MSG("g_new0 failed");
+
 		return NET_NFC_ALLOC_FAIL;
 	}
-	strncpy((char *)psocket_data->service_name, (char *)service_name, srv_name_count);
-	psocket_data->sap = sap;
 
-	/* fill request message */
-	length = sizeof(net_nfc_request_listen_socket_t) + srv_name_count;
+	func_data->callback = (gpointer)callback;
+	func_data->user_data = user_data;
 
-	_net_nfc_client_util_alloc_mem(request, length);
-	if (request == NULL)
-	{
-		_net_nfc_client_util_free_mem(psocket_data->service_name);
-		pthread_mutex_unlock(&llcp_lock);
-		return NET_NFC_ALLOC_FAIL;
-	}
+	net_nfc_gdbus_llcp_call_connect(llcp_proxy,
+				GPOINTER_TO_UINT(llcp_handle),
+				socket_data->client_socket,
+				socket_data->miu,
+				socket_data->rw,
+				socket_data->type,
+				service_name,
+				net_nfc_client_gdbus_get_privilege(),
+				NULL,
+				llcp_call_connect,
+				func_data);
 
-	request->length = length;
-	request->request_type = NET_NFC_MESSAGE_LLCP_LISTEN;
-	request->handle = current_target;
-	request->miu = psocket_data->miu;
-	request->oal_socket = psocket_data->oal_socket;
-	request->rw = psocket_data->rw;
-	request->sap = psocket_data->sap;
-	request->type = psocket_data->type;
-	request->client_socket = psocket_data->client_socket;
-	request->trans_param = trans_param;
-
-	request->service_name.length = srv_name_count;
-	memcpy(&request->service_name.buffer, psocket_data->service_name, request->service_name.length);
-
-	ret = _net_nfc_client_send_reqeust((net_nfc_request_msg_t *)request, NULL);
-
-	_net_nfc_client_util_free_mem(request);
-
-	pthread_mutex_unlock(&llcp_lock);
-
-	return ret;
+	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_disconnect_llcp(net_nfc_llcp_socket_t socket, void * trans_param)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_connect_sync(net_nfc_llcp_socket_t socket,
+					const char *service_name,
+					net_nfc_llcp_socket_t *out_socket)
 {
-	net_nfc_llcp_internal_socket_s *psocket_data;
-	net_nfc_request_disconnect_socket_t request = { 0, };
-	net_nfc_error_e ret;
+	net_nfc_error_e result;
+	GError *error = NULL;
+	guint32 out_client_socket;
 
-	DEBUG_CLIENT_MSG("function %s is called. socket#[ %d ]", __func__, socket);
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+	net_nfc_llcp_internal_socket_s *out_socket_data = NULL;
 
-	pthread_mutex_lock(&llcp_lock);
-	psocket_data = _find_internal_socket_info(socket);
-	if (psocket_data == NULL)
-	{
-		pthread_mutex_unlock(&llcp_lock);
-		return NET_NFC_LLCP_INVALID_SOCKET;
-	}
-
-	request.length = sizeof(net_nfc_request_disconnect_socket_t);
-	request.request_type = NET_NFC_MESSAGE_LLCP_DISCONNECT;
-	request.handle = current_target;
-	request.oal_socket = psocket_data->oal_socket;
-	request.client_socket = psocket_data->client_socket;
-	request.trans_param = trans_param;
-
-	ret = _net_nfc_client_send_reqeust((net_nfc_request_msg_t *)&request, NULL);
-
-	pthread_mutex_unlock(&llcp_lock);
-
-	return ret;
-}
-
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_close_llcp_socket(net_nfc_llcp_socket_t socket, void * trans_param)
-{
-	net_nfc_llcp_internal_socket_s *psocket_data = NULL;
-	net_nfc_request_close_socket_t request = { 0, };
-	net_nfc_error_e ret;
-
-	DEBUG_CLIENT_MSG("function %s is called. socket#[ %d ]", __func__, socket);
-
-	pthread_mutex_lock(&llcp_lock);
-	psocket_data = _find_internal_socket_info(socket);
-	if (psocket_data == NULL)
-	{
-		pthread_mutex_unlock(&llcp_lock);
-		return NET_NFC_LLCP_INVALID_SOCKET;
-	}
-
-	if (psocket_data->close_requested)
-	{
-		pthread_mutex_unlock(&llcp_lock);
-		return NET_NFC_OK;
-	}
-	psocket_data->close_requested = true;
-
-	request.length = sizeof(net_nfc_request_close_socket_t);
-	request.request_type = NET_NFC_MESSAGE_SERVICE_LLCP_CLOSE;
-	request.handle = current_target;
-	request.oal_socket = psocket_data->oal_socket;
-	request.client_socket = psocket_data->client_socket;
-	request.trans_param = trans_param;
-
-	ret = _net_nfc_client_send_reqeust((net_nfc_request_msg_t *)&request, NULL);
-
-	_remove_internal_socket(psocket_data);
-
-	pthread_mutex_unlock(&llcp_lock);
-
-	return ret;
-}
-
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_send_llcp(net_nfc_llcp_socket_t socket, data_h data, void * trans_param)
-{
-	net_nfc_llcp_internal_socket_s *psocket_data;
-	net_nfc_request_send_socket_t *request = NULL;
-	data_s *data_private = (data_s *)data;
-	net_nfc_error_e ret;
-	uint32_t length = 0;
-
-	if (data_private == NULL || data_private->buffer == NULL || data_private->length == 0)
-	{
+	if (service_name == NULL || out_socket == NULL) {
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	DEBUG_CLIENT_MSG("function %s is called. socket#[ %d ]", __func__, socket);
-
-	pthread_mutex_lock(&llcp_lock);
-	psocket_data = _find_internal_socket_info(socket);
-	if (psocket_data == NULL)
+	if (llcp_proxy == NULL)
 	{
-		pthread_mutex_unlock(&llcp_lock);
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
 		return NET_NFC_LLCP_INVALID_SOCKET;
 	}
 
-	/* fill request message */
-	length = sizeof(net_nfc_request_send_socket_t) + data_private->length;
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
 
-	_net_nfc_client_util_alloc_mem(request, length);
-	if (request == NULL)
+	if (net_nfc_gdbus_llcp_call_connect_sync(llcp_proxy,
+					GPOINTER_TO_UINT(llcp_handle),
+					socket_data->client_socket,
+					socket_data->miu,
+					socket_data->rw,
+					socket_data->type,
+					service_name,
+					net_nfc_client_gdbus_get_privilege(),
+					&result,
+					&out_client_socket,
+					NULL,
+					&error) == true) {
+		out_socket_data = llcp_socket_data_find(out_client_socket);
+		if (out_socket_data == NULL || out_socket_data !=  socket_data)
+		{
+			DEBUG_ERR_MSG("Wrong client socket is returned");
+			return NET_NFC_UNKNOWN_ERROR;
+		}
+
+//		out_socket_data->oal_socket = out_oal_socket;
+
+		if (out_socket)
+			*out_socket = out_client_socket;
+	} else {
+		DEBUG_ERR_MSG("can not connect: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	return result;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_connect_sap(net_nfc_llcp_socket_t socket,
+			sap_t sap,
+			net_nfc_client_llcp_connect_sap_completed callback,
+			void *user_data)
+{
+	LlcpFuncData *func_data;
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+
+	if (sap == 0) {
+		return NET_NFC_INVALID_PARAM;
+	}
+
+	if (llcp_proxy == NULL)
 	{
-		pthread_mutex_unlock(&llcp_lock);
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
+		return NET_NFC_LLCP_INVALID_SOCKET;
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	func_data = g_new0(LlcpFuncData, 1);
+	if (func_data == NULL) {
+		DEBUG_ERR_MSG("g_new0 failed");
+
 		return NET_NFC_ALLOC_FAIL;
 	}
 
-	request->length = length;
-	request->request_type = NET_NFC_MESSAGE_LLCP_SEND;
-	request->handle = current_target;
-	request->oal_socket = psocket_data->oal_socket;
-	request->client_socket = psocket_data->client_socket;
-	request->trans_param = trans_param;
+	func_data->callback = (gpointer)callback;
+	func_data->user_data = user_data;
 
-	request->data.length = data_private->length;
-	memcpy(&request->data.buffer, data_private->buffer, request->data.length);
+	net_nfc_gdbus_llcp_call_connect_sap(llcp_proxy,
+				GPOINTER_TO_UINT(llcp_handle),
+				socket_data->client_socket,
+				socket_data->miu,
+				socket_data->rw,
+				socket_data->type,
+				sap,
+				net_nfc_client_gdbus_get_privilege(),
+				NULL,
+				llcp_call_connect_sap,
+				func_data);
 
-	ret = _net_nfc_client_send_reqeust((net_nfc_request_msg_t *)request, NULL);
-
-	_net_nfc_client_util_free_mem(request);
-
-	pthread_mutex_unlock(&llcp_lock);
-
-	return ret;
+	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_receive_llcp(net_nfc_llcp_socket_t socket, size_t req_length, void * trans_param)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_connect_sap_sync(
+					net_nfc_llcp_socket_t socket,
+					sap_t sap,
+					net_nfc_llcp_socket_t *out_socket)
 {
-	net_nfc_llcp_internal_socket_s *psocket_data = NULL;
-	net_nfc_request_receive_socket_t request = { 0, };
-	net_nfc_error_e ret;
+	net_nfc_error_e result;
+	GError *error = NULL;
+	guint32 out_client_socket;
 
-	DEBUG_CLIENT_MSG("function %s is called. socket#[ %d ]", __func__, socket);
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+	net_nfc_llcp_internal_socket_s *out_socket_data = NULL;
 
-	pthread_mutex_lock(&llcp_lock);
-
-	psocket_data = _find_internal_socket_info(socket);
-	if (psocket_data == NULL)
-	{
-		pthread_mutex_unlock(&llcp_lock);
-		return NET_NFC_LLCP_INVALID_SOCKET;
-	}
-
-	request.length = sizeof(net_nfc_request_receive_socket_t);
-	request.request_type = NET_NFC_MESSAGE_LLCP_RECEIVE;
-	request.handle = current_target;
-	request.oal_socket = psocket_data->oal_socket;
-	request.client_socket = psocket_data->client_socket;
-	request.trans_param = trans_param;
-	request.req_length = req_length;
-
-	ret = _net_nfc_client_send_reqeust((net_nfc_request_msg_t *)&request, NULL);
-
-	pthread_mutex_unlock(&llcp_lock);
-
-	return ret;
-}
-
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_send_to_llcp(net_nfc_llcp_socket_t socket, sap_t dsap, data_h data, void *trans_param)
-{
-	net_nfc_llcp_internal_socket_s *psocket_data = NULL;
-	net_nfc_request_send_to_socket_t *request = NULL;
-	data_s * data_private = (data_s *)data;
-	net_nfc_error_e ret;
-	uint32_t length = 0;
-
-	if (data_private == NULL || data_private->buffer == NULL || data_private->length == 0)
-	{
+	if (out_socket == NULL) {
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	DEBUG_CLIENT_MSG("function %s is called. socket#[ %d ]", __func__, socket);
+	if (sap == 0) {
+		return NET_NFC_INVALID_PARAM;
+	}
 
-	pthread_mutex_lock(&llcp_lock);
-	psocket_data = _find_internal_socket_info(socket);
-	if (psocket_data == NULL)
+	if (llcp_proxy == NULL)
 	{
-		pthread_mutex_unlock(&llcp_lock);
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
 		return NET_NFC_LLCP_INVALID_SOCKET;
 	}
 
-	/* fill request message */
-	length = sizeof(net_nfc_request_send_to_socket_t) + data_private->length;
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
 
-	_net_nfc_client_util_alloc_mem(request, length);
-	if (request == NULL)
+	if (net_nfc_gdbus_llcp_call_connect_sap_sync(llcp_proxy,
+					GPOINTER_TO_UINT(llcp_handle),
+					socket_data->client_socket,
+					socket_data->miu,
+					socket_data->rw,
+					socket_data->type,
+					sap,
+					net_nfc_client_gdbus_get_privilege(),
+					&result,
+					&out_client_socket,
+					NULL,
+					&error) == true) {
+		out_socket_data = llcp_socket_data_find(out_client_socket);
+		if (out_socket_data == NULL || out_socket_data !=  socket_data)
+		{
+			DEBUG_ERR_MSG("Wrong client socket is returned");
+			return NET_NFC_UNKNOWN_ERROR;
+		}
+
+//		out_socket_data->oal_socket = out_oal_socket;
+
+		if (out_socket)
+			*out_socket = out_client_socket;
+	} else {
+		DEBUG_ERR_MSG("can not connect: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	return result;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_send(net_nfc_llcp_socket_t socket,
+				data_h data,
+				net_nfc_client_llcp_send_completed callback,
+				void *user_data)
+{
+	LlcpFuncData *func_data;
+	GVariant *variant;
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+
+	if (data == NULL) {
+		return NET_NFC_NULL_PARAMETER;
+	}
+
+	if (socket <= 0) {
+		return NET_NFC_INVALID_PARAM;
+	}
+
+	if (llcp_proxy == NULL)
 	{
-		pthread_mutex_unlock(&llcp_lock);
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
+		return NET_NFC_LLCP_INVALID_SOCKET;
+	}
+
+	func_data = g_new0(LlcpFuncData, 1);
+	if (func_data == NULL) {
+		DEBUG_ERR_MSG("g_new0 failed");
+
 		return NET_NFC_ALLOC_FAIL;
 	}
 
-	request->length = length;
-	request->request_type = NET_NFC_MESSAGE_LLCP_SEND_TO;
-	request->handle = current_target;
-	request->oal_socket = psocket_data->oal_socket;
-	request->client_socket = psocket_data->client_socket;
-	request->trans_param = trans_param;
+	func_data->callback = (gpointer)callback;
+	func_data->user_data = user_data;
 
-	request->data.length = data_private->length;
-	memcpy(&request->data.buffer, data_private->buffer, request->data.length);
+	variant = net_nfc_util_gdbus_data_to_variant(data);
 
-	ret = _net_nfc_client_send_reqeust((net_nfc_request_msg_t *)request, NULL);
+	net_nfc_gdbus_llcp_call_send(llcp_proxy,
+				GPOINTER_TO_UINT(llcp_handle),
+				socket_data->client_socket,
+				variant,
+				net_nfc_client_gdbus_get_privilege(),
+				NULL,
+				llcp_call_send,
+				func_data);
 
-	_net_nfc_client_util_free_mem(request);
-
-	pthread_mutex_unlock(&llcp_lock);
-
-	return ret;
+	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_receive_from_llcp(net_nfc_llcp_socket_t socket, sap_t ssap, size_t req_length, void * trans_param)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_send_sync(net_nfc_llcp_socket_t socket,
+					data_h data)
 {
-	net_nfc_llcp_internal_socket_s *psocket_data = NULL;
-	net_nfc_request_receive_from_socket_t request = { 0, };
-	net_nfc_error_e ret;
+	net_nfc_error_e result;
+	GVariant *variant;
+	GError *error = NULL;
+	guint32 out_client_socket;
 
-	DEBUG_CLIENT_MSG("function %s is called. socket#[ %d ]", __func__, socket);
+	net_nfc_llcp_internal_socket_s *socket_data;
+	net_nfc_llcp_internal_socket_s *out_socket_data;
 
-	pthread_mutex_lock(&llcp_lock);
+	if (data == NULL) {
+		return NET_NFC_NULL_PARAMETER;
+	}
 
-	psocket_data = _find_internal_socket_info(socket);
-	if (psocket_data == NULL)
+	if (socket <= 0) {
+		return NET_NFC_INVALID_PARAM;
+	}
+
+	if (llcp_proxy == NULL)
 	{
-		pthread_mutex_unlock(&llcp_lock);
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
 		return NET_NFC_LLCP_INVALID_SOCKET;
 	}
 
-	request.length = sizeof(net_nfc_request_receive_from_socket_t);
-	request.request_type = NET_NFC_MESSAGE_LLCP_RECEIVE_FROM;
-	request.handle = current_target;
-	request.oal_socket = psocket_data->oal_socket;
-	request.client_socket = psocket_data->client_socket;
-	request.trans_param = trans_param;
-	request.req_length = req_length;
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
 
-	ret = _net_nfc_client_send_reqeust((net_nfc_request_msg_t *)&request, NULL);
+	variant = net_nfc_util_gdbus_data_to_variant(data);
 
-	pthread_mutex_unlock(&llcp_lock);
+	if (net_nfc_gdbus_llcp_call_send_sync(llcp_proxy,
+		GPOINTER_TO_UINT(llcp_handle),
+		socket_data->client_socket,
+		variant,
+		net_nfc_client_gdbus_get_privilege(),
+		&result,
+		&out_client_socket,
+		NULL,
+		&error) == true) {
+		out_socket_data = llcp_socket_data_find(out_client_socket);
+		if (out_socket_data == NULL)
+		{
+			DEBUG_ERR_MSG("can not find socket_data");
+			return NET_NFC_UNKNOWN_ERROR;
+		}
+	} else {
+		DEBUG_ERR_MSG("can not call send: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
 
-	return ret;
+		g_error_free(error);
+	}
+
+	return result;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_connect_llcp_with_sap(net_nfc_llcp_socket_t socket, sap_t sap, void * trans_param)
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_send_to(net_nfc_llcp_socket_t socket,
+	sap_t sap,
+	data_h data,
+	net_nfc_client_llcp_send_to_completed callback,
+	void *user_data)
 {
-	net_nfc_llcp_internal_socket_s *psocket_data = NULL;
-	net_nfc_request_connect_sap_socket_t request = { 0, };
-	net_nfc_error_e ret;
+	LlcpFuncData *func_data;
+	GVariant *variant;
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
 
-	DEBUG_CLIENT_MSG("function %s is called. socket#[ %d ]", __func__, socket);
+	if (data == NULL) {
+		return NET_NFC_NULL_PARAMETER;
+	}
 
-	pthread_mutex_lock(&llcp_lock);
+	if (socket <= 0 || sap == 0) {
+		return NET_NFC_INVALID_PARAM;
+	}
 
-	psocket_data = _find_internal_socket_info(socket);
-	if (psocket_data == NULL)
+	if (llcp_proxy == NULL)
 	{
-		pthread_mutex_unlock(&llcp_lock);
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
 		return NET_NFC_LLCP_INVALID_SOCKET;
 	}
 
-	request.length = sizeof(net_nfc_request_connect_sap_socket_t);
-	request.request_type = NET_NFC_MESSAGE_LLCP_CONNECT_SAP;
-	request.handle = current_target;
-	request.oal_socket = psocket_data->oal_socket;
-	request.sap = sap;
-	request.client_socket = psocket_data->client_socket;
-	request.trans_param = trans_param;
-	request.miu = psocket_data->miu;
-	request.rw = psocket_data->rw;
-
-	ret = _net_nfc_client_send_reqeust((net_nfc_request_msg_t *)&request, NULL);
-
-	pthread_mutex_unlock(&llcp_lock);
-
-	return ret;
-}
-
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_connect_llcp(net_nfc_llcp_socket_t socket, const char *service_name, void *trans_param)
-{
-	net_nfc_llcp_internal_socket_s *psocket_data = NULL;
-	net_nfc_request_connect_socket_t *request = NULL;
-	net_nfc_error_e ret;
-	uint32_t length = 0, svc_name_length = 0;
-
-	DEBUG_CLIENT_MSG("function %s is called. socket#[ %d ]", __func__, socket);
-
-	pthread_mutex_lock(&llcp_lock);
-
-	psocket_data = _find_internal_socket_info(socket);
-	if (psocket_data == NULL)
-	{
-		pthread_mutex_unlock(&llcp_lock);
-		return NET_NFC_LLCP_INVALID_SOCKET;
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
 	}
 
-	svc_name_length = strlen(service_name) + 1;
+	func_data = g_new0(LlcpFuncData, 1);
+	if (func_data == NULL) {
+		DEBUG_ERR_MSG("g_new0 failed");
 
-	/* fill request message */
-	length = sizeof(net_nfc_request_connect_socket_t) + svc_name_length;
-
-	_net_nfc_client_util_alloc_mem(request, length);
-	if (request == NULL)
-	{
-		pthread_mutex_unlock(&llcp_lock);
 		return NET_NFC_ALLOC_FAIL;
 	}
 
-	request->length = length;
-	request->request_type = NET_NFC_MESSAGE_LLCP_CONNECT;
-	request->handle = current_target;
-	request->oal_socket = psocket_data->oal_socket;
-	request->client_socket = psocket_data->client_socket;
-	request->trans_param = trans_param;
-	request->miu = psocket_data->miu;
-	request->rw = psocket_data->rw;
+	func_data->callback = (gpointer)callback;
+	func_data->user_data = user_data;
 
-	request->service_name.length = svc_name_length;
-	memcpy(&request->service_name.buffer, service_name, request->service_name.length);
+	variant = net_nfc_util_gdbus_data_to_variant(data);
 
-	ret = _net_nfc_client_send_reqeust((net_nfc_request_msg_t *)request, NULL);
+	net_nfc_gdbus_llcp_call_send_to(llcp_proxy,
+		GPOINTER_TO_UINT(llcp_handle),
+		socket_data->client_socket,
+		sap,
+		variant,
+		net_nfc_client_gdbus_get_privilege(),
+		NULL,
+		llcp_call_send_to,
+		func_data);
 
-	_net_nfc_client_util_free_mem(request);
-
-	pthread_mutex_unlock(&llcp_lock);
-
-	return ret;
+	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_llcp_local_configure(net_nfc_llcp_config_info_h * config)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_send_to_sync(net_nfc_llcp_socket_t socket,
+	sap_t sap,
+	data_h data)
+{
+	net_nfc_error_e result;
+	GVariant *variant;
+	GError *error = NULL;
+	guint32 out_client_socket;
+
+	net_nfc_llcp_internal_socket_s *socket_data;
+	net_nfc_llcp_internal_socket_s *out_socket_data;
+
+	if (data == NULL) {
+		return NET_NFC_NULL_PARAMETER;
+	}
+
+	if (socket <= 0 || sap == 0) {
+		return NET_NFC_INVALID_PARAM;
+	}
+
+	if (llcp_proxy == NULL)
+	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
+		return NET_NFC_LLCP_INVALID_SOCKET;
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	variant = net_nfc_util_gdbus_data_to_variant(data);
+
+	if (net_nfc_gdbus_llcp_call_send_to_sync(llcp_proxy,
+		GPOINTER_TO_UINT(llcp_handle),
+		socket_data->client_socket,
+		sap,
+		variant,
+		net_nfc_client_gdbus_get_privilege(),
+		&result,
+		&out_client_socket,
+		NULL,
+		&error) == true) {
+		out_socket_data = llcp_socket_data_find(out_client_socket);
+		if (out_socket_data == NULL)
+		{
+			DEBUG_ERR_MSG("can not find socket_data");
+			return NET_NFC_UNKNOWN_ERROR;
+		}
+	} else {
+		DEBUG_ERR_MSG("can not call send to: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	return result;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_receive(net_nfc_llcp_socket_t socket,
+	size_t request_length,
+	net_nfc_client_llcp_receive_completed callback,
+	void *user_data)
+{
+	LlcpFuncData *func_data;
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+
+	if (socket <= 0 || request_length == 0) {
+		return NET_NFC_INVALID_PARAM;
+	}
+
+	if (llcp_proxy == NULL)
+	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
+		return NET_NFC_LLCP_INVALID_SOCKET;
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	func_data = g_new0(LlcpFuncData, 1);
+	if (func_data == NULL) {
+		DEBUG_ERR_MSG("g_new0 failed");
+
+		return NET_NFC_ALLOC_FAIL;
+	}
+
+	func_data->callback = (gpointer)callback;
+	func_data->user_data = user_data;
+
+	net_nfc_gdbus_llcp_call_receive(llcp_proxy,
+				GPOINTER_TO_UINT(llcp_handle),
+				socket_data->client_socket,
+				request_length,
+				net_nfc_client_gdbus_get_privilege(),
+				NULL,
+				llcp_call_receive,
+				func_data);
+
+	return NET_NFC_OK;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_receive_sync(net_nfc_llcp_socket_t socket,
+	size_t request_length,
+	data_h *out_data)
+{
+	net_nfc_error_e result;
+	GVariant *variant;
+	GError *error = NULL;
+	net_nfc_llcp_internal_socket_s *socket_data;
+
+	if (out_data == NULL) {
+		return NET_NFC_NULL_PARAMETER;
+	}
+
+	*out_data = NULL;
+
+	if (socket <= 0 || request_length == 0) {
+		return NET_NFC_INVALID_PARAM;
+	}
+
+	if (llcp_proxy == NULL)
+	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
+		return NET_NFC_LLCP_INVALID_SOCKET;
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	if (net_nfc_gdbus_llcp_call_receive_sync(llcp_proxy,
+		GPOINTER_TO_UINT(llcp_handle),
+		socket_data->client_socket,
+		request_length,
+		net_nfc_client_gdbus_get_privilege(),
+		&result,
+		&variant,
+		NULL,
+		&error) == true) {
+		*out_data = net_nfc_util_gdbus_variant_to_data(variant);
+	} else {
+		DEBUG_ERR_MSG("can not call receive: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	return result;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_receive_from(net_nfc_llcp_socket_t socket,
+	size_t request_length,
+	net_nfc_client_llcp_receive_from_completed callback,
+	void *user_data)
+{
+	LlcpFuncData *func_data;
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+
+	if (socket <= 0 || request_length == 0) {
+		return NET_NFC_INVALID_PARAM;
+	}
+
+	if (llcp_proxy == NULL)
+	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
+		return NET_NFC_LLCP_INVALID_SOCKET;
+	}
+
+	func_data = g_new0(LlcpFuncData, 1);
+	if (func_data == NULL) {
+		DEBUG_ERR_MSG("g_new0 failed");
+
+		return NET_NFC_ALLOC_FAIL;
+	}
+
+	func_data->callback = (gpointer)callback;
+	func_data->user_data = user_data;
+
+	net_nfc_gdbus_llcp_call_receive_from(llcp_proxy,
+				GPOINTER_TO_UINT(llcp_handle),
+				socket_data->client_socket,
+				request_length,
+				net_nfc_client_gdbus_get_privilege(),
+				NULL,
+				llcp_call_receive_from,
+				func_data);
+
+	return NET_NFC_OK;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_receive_from_sync(
+	net_nfc_llcp_socket_t socket,
+	size_t request_length,
+	sap_t *out_sap,
+	data_h *out_data)
+{
+	net_nfc_error_e result;
+	GError *error = NULL;
+	GVariant *variant;
+	sap_t sap;
+
+	net_nfc_llcp_internal_socket_s *socket_data;
+
+	if (out_sap == NULL || out_data == NULL) {
+		return NET_NFC_NULL_PARAMETER;
+	}
+
+	*out_data = NULL;
+	*out_sap = 0;
+
+	if (socket <= 0 || request_length == 0) {
+		return NET_NFC_INVALID_PARAM;
+	}
+
+	if (llcp_proxy == NULL)
+	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
+		return NET_NFC_LLCP_INVALID_SOCKET;
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	if (net_nfc_gdbus_llcp_call_receive_from_sync(llcp_proxy,
+		GPOINTER_TO_UINT(llcp_handle),
+		socket_data->client_socket,
+		request_length,
+		net_nfc_client_gdbus_get_privilege(),
+		&result,
+		&sap,
+		&variant,
+		NULL,
+		&error) == true) {
+		*out_sap = sap;
+		*out_data = net_nfc_util_gdbus_variant_to_data(variant);
+	} else {
+		DEBUG_ERR_MSG("can not call receive from: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	return result;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_close(net_nfc_llcp_socket_t socket,
+				net_nfc_client_llcp_close_completed callback,
+				void *user_data)
+{
+	LlcpFuncData *func_data;
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+
+	if (socket <= 0) {
+		return NET_NFC_INVALID_PARAM;
+	}
+
+	if (llcp_proxy == NULL)
+	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
+		return NET_NFC_LLCP_INVALID_SOCKET;
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	func_data = g_new0(LlcpFuncData, 1);
+	if (func_data == NULL) {
+		DEBUG_ERR_MSG("g_new0 failed");
+
+		return NET_NFC_ALLOC_FAIL;
+	}
+
+	func_data->callback = (gpointer)callback;
+	func_data->user_data = user_data;
+
+	net_nfc_gdbus_llcp_call_close(llcp_proxy,
+				GPOINTER_TO_UINT(llcp_handle),
+				socket_data->client_socket,
+				net_nfc_client_gdbus_get_privilege(),
+				NULL,
+				llcp_call_close,
+				func_data);
+
+	return NET_NFC_OK;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_close_sync(net_nfc_llcp_socket_t socket)
+{
+	net_nfc_error_e result;
+	GError *error = NULL;
+	guint32 out_client_socket;
+
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+	net_nfc_llcp_internal_socket_s *out_socket_data = NULL;
+
+	if (socket <= 0) {
+		return NET_NFC_INVALID_PARAM;
+	}
+
+	if (llcp_proxy == NULL)
+	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
+		return NET_NFC_LLCP_INVALID_SOCKET;
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	if (net_nfc_gdbus_llcp_call_close_sync(llcp_proxy,
+		GPOINTER_TO_UINT(llcp_handle),
+		socket_data->client_socket,
+		net_nfc_client_gdbus_get_privilege(),
+		&result,
+		&out_client_socket,
+		NULL,
+		&error) == true) {
+		out_socket_data = llcp_socket_data_find(out_client_socket);
+		if (out_socket_data == NULL || out_socket_data !=  socket_data)
+		{
+			DEBUG_ERR_MSG("Wrong client socket is returned");
+			return NET_NFC_UNKNOWN_ERROR;
+		}
+	} else {
+		DEBUG_ERR_MSG("can not close: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	return result;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_disconnect(net_nfc_llcp_socket_t socket,
+	net_nfc_client_llcp_disconnect_completed callback,
+	void *user_data)
+{
+	LlcpFuncData *func_data;
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+
+	if (socket <= 0) {
+		return NET_NFC_INVALID_PARAM;
+	}
+
+	if (llcp_proxy == NULL)
+	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
+		return NET_NFC_LLCP_INVALID_SOCKET;
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	func_data = g_new0(LlcpFuncData, 1);
+	if (func_data == NULL) {
+		DEBUG_ERR_MSG("g_new0 failed");
+
+		return NET_NFC_ALLOC_FAIL;
+	}
+
+	func_data->callback = (gpointer)callback;
+	func_data->user_data = user_data;
+
+	net_nfc_gdbus_llcp_call_disconnect(llcp_proxy,
+				GPOINTER_TO_UINT(llcp_handle),
+				socket_data->client_socket,
+				net_nfc_client_gdbus_get_privilege(),
+				NULL,
+				llcp_call_disconnect,
+				func_data);
+
+	return NET_NFC_OK;
+}
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_disconnect_sync(
+	net_nfc_llcp_socket_t socket)
+{
+	net_nfc_error_e result;
+	GError *error = NULL;
+	guint32 out_client_socket;
+
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+	net_nfc_llcp_internal_socket_s *out_socket_data = NULL;
+
+	if (socket <= 0) {
+		return NET_NFC_INVALID_PARAM;
+	}
+
+	if (llcp_proxy == NULL)
+	{
+		if(net_nfc_client_llcp_init() != NET_NFC_OK)
+		{
+			DEBUG_ERR_MSG("llcp_proxy fail");
+			return NET_NFC_NOT_INITIALIZED;
+		}
+	}
+
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
+	{
+		DEBUG_ERR_MSG("can not get socket_data");
+		return NET_NFC_LLCP_INVALID_SOCKET;
+	}
+
+	/* prevent executing daemon when nfc is off */
+	if (net_nfc_client_manager_is_activated() == false) {
+		return NET_NFC_NOT_ACTIVATED;
+	}
+
+	if (net_nfc_gdbus_llcp_call_disconnect_sync(llcp_proxy,
+		GPOINTER_TO_UINT(llcp_handle),
+		socket_data->client_socket,
+		net_nfc_client_gdbus_get_privilege(),
+		&result,
+		&out_client_socket,
+		NULL,
+		&error) == true) {
+		out_socket_data = llcp_socket_data_find(out_client_socket);
+		if (out_socket_data == NULL || out_socket_data !=  socket_data)
+		{
+			DEBUG_ERR_MSG("Wrong client socket is returned");
+			return NET_NFC_UNKNOWN_ERROR;
+		}
+	} else {
+		DEBUG_ERR_MSG("can not disconnect: %s", error->message);
+		result = NET_NFC_IPC_FAIL;
+
+		g_error_free(error);
+	}
+
+	return result;
+}
+
+NET_NFC_EXPORT_API
+void net_nfc_client_llcp_create_socket(net_nfc_llcp_socket_t *socket,
+				net_nfc_llcp_socket_option_h option)
+{
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
+
+	socket_data = g_new0(net_nfc_llcp_internal_socket_s, 1);
+
+	socket_data->client_socket = socket_handle++;
+
+	if (option)
+	{
+		socket_data->miu = option->miu;
+		socket_data->rw = option->rw;
+		socket_data->type = option->type;
+	}
+	else
+	{
+		socket_data->miu = 128;
+		socket_data->rw = 1;
+		socket_data->type =
+			NET_NFC_LLCP_SOCKET_TYPE_CONNECTIONORIENTED;
+	}
+
+	socket_data->device_id = llcp_handle;
+	socket_data->close_requested = false;
+
+
+	if (socket)
+		*socket = socket_data->client_socket;
+}
+
+
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_get_local_config(
+					net_nfc_llcp_config_info_h *config)
 {
 	if (config == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	*config = (net_nfc_llcp_config_info_h)&local_config;
+	*config = (net_nfc_llcp_config_info_h)&llcp_config;
 
 	return NET_NFC_OK;
 }
 
-void _net_nfc_set_llcp_remote_configure(net_nfc_llcp_config_info_s * remote_data)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_get_local_socket_option(
+					net_nfc_llcp_socket_t socket,
+					net_nfc_llcp_socket_option_h *info)
 {
-	if (remote_data == NULL)
-	{
-		DEBUG_CLIENT_MSG("recieved data is NULL");
-		return;
-	}
-	remote_config.lto = remote_data->lto;
-	remote_config.wks = remote_data->wks;
-	remote_config.miu = remote_data->miu;
-	remote_config.option = remote_data->option;
-
-}
-
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_llcp_remote_configure(net_nfc_target_handle_h handle, net_nfc_llcp_config_info_h * config)
-{
-	if (config == NULL || handle == NULL)
-	{
-		return NET_NFC_NULL_PARAMETER;
-	}
-
-	if (current_target == NULL || (net_nfc_target_handle_s*)handle != current_target)
-	{
-		return NET_NFC_INVALID_HANDLE;
-	}
-
-	*config = (net_nfc_llcp_config_info_h)&remote_config;
-
-	return NET_NFC_OK;
-}
-
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_set_llcp_local_configure(net_nfc_llcp_config_info_h config, void * trans_param)
-{
-	net_nfc_request_config_llcp_t request = { 0, };
-	net_nfc_error_e ret;
+	net_nfc_llcp_internal_socket_s *socket_data = NULL;
 
 	DEBUG_CLIENT_MSG("function %s is called", __func__);
 
-	if (config == NULL)
-	{
-		return NET_NFC_NULL_PARAMETER;
-	}
-
-	request.length = sizeof(net_nfc_request_config_llcp_t);
-	request.request_type = NET_NFC_MESSAGE_LLCP_CONFIG;
-	memset(&request, 0x0, sizeof(net_nfc_request_config_llcp_t));
-	memcpy(&local_config, config, sizeof(net_nfc_llcp_config_info_s));
-	request.trans_param = trans_param;
-	memcpy(&(request.config), config, sizeof(net_nfc_llcp_config_info_s));
-
-	ret = _net_nfc_client_send_reqeust((net_nfc_request_msg_t *)&request, NULL);
-
-	return ret;
-}
-
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_llcp_local_socket_option(net_nfc_llcp_socket_t socket, net_nfc_llcp_socket_option_h * info)
-{
-	net_nfc_llcp_internal_socket_s *psocket_data = NULL;
-
-	DEBUG_CLIENT_MSG("function %s is called", __func__);
-
-	psocket_data = _find_internal_socket_info(socket);
-	if (psocket_data == NULL)
+	socket_data = llcp_socket_data_find(socket);
+	if (socket_data == NULL)
 		return NET_NFC_LLCP_INVALID_SOCKET;
 
-	*info = (net_nfc_llcp_socket_option_h)psocket_data;
+	*info = (net_nfc_llcp_socket_option_h)socket_data;
 
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_llcp_remote_socket_option(net_nfc_llcp_socket_t socket, net_nfc_llcp_socket_option_h * info)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_create_socket_option(
+					net_nfc_llcp_socket_option_h *option,
+					uint16_t miu,
+					uint8_t rw,
+					net_nfc_socket_type_e type)
 {
-	info = NULL;
-	return NET_NFC_OK;
-}
+	net_nfc_llcp_socket_option_s *struct_option = NULL;
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_create_llcp_socket_option(net_nfc_llcp_socket_option_h * option, uint16_t miu, uint8_t rw, net_nfc_socket_type_e type)
-{
 	if (option == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
@@ -785,17 +2146,15 @@ NET_NFC_EXPORT_API net_nfc_error_e net_nfc_create_llcp_socket_option(net_nfc_llc
 
 	if (miu < 128 || miu > 1152 ||
 		rw < 1 || rw > 15 ||
-		type < NET_NFC_LLCP_SOCKET_TYPE_CONNECTIONORIENTED || type > NET_NFC_LLCP_SOCKET_TYPE_CONNECTIONLESS)
+		type < NET_NFC_LLCP_SOCKET_TYPE_CONNECTIONORIENTED ||
+		type > NET_NFC_LLCP_SOCKET_TYPE_CONNECTIONLESS)
 	{
-
 		return NET_NFC_OUT_OF_BOUND;
 	}
 
-	net_nfc_llcp_socket_option_s * struct_option = NULL;
-
-	if ((struct_option = calloc(1, sizeof(net_nfc_llcp_socket_option_s))) != NULL)
+	_net_nfc_util_alloc_mem(struct_option, sizeof(net_nfc_llcp_socket_option_s));
+	if (struct_option != NULL)
 	{
-
 		struct_option->miu = miu;
 		struct_option->rw = rw;
 		struct_option->type = type;
@@ -808,179 +2167,241 @@ NET_NFC_EXPORT_API net_nfc_error_e net_nfc_create_llcp_socket_option(net_nfc_llc
 	{
 		return NET_NFC_ALLOC_FAIL;
 	}
-
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_create_llcp_socket_option_default(net_nfc_llcp_socket_option_h * option)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_create_socket_option_default(
+					net_nfc_llcp_socket_option_h *option)
 {
-	return net_nfc_create_llcp_socket_option(option, 128, 1, NET_NFC_LLCP_SOCKET_TYPE_CONNECTIONORIENTED);
+	return net_nfc_client_llcp_create_socket_option(
+					option,
+					128,
+					1,
+					NET_NFC_LLCP_SOCKET_TYPE_CONNECTIONORIENTED);
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_llcp_socket_option_miu(net_nfc_llcp_socket_option_h option, uint16_t * miu)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_get_socket_option_miu(
+	net_nfc_llcp_socket_option_h option,
+	uint16_t *miu)
 {
+	net_nfc_llcp_socket_option_s *struct_option =
+		(net_nfc_llcp_socket_option_s *)option;
+
 	if (option == NULL || miu == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
-	net_nfc_llcp_socket_option_s * struct_option = (net_nfc_llcp_socket_option_s *)option;
 
 	*miu = struct_option->miu;
-	return NET_NFC_OK;
 
+	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_set_llcp_socket_option_miu(net_nfc_llcp_socket_option_h option, uint16_t miu)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_set_socket_option_miu(
+	net_nfc_llcp_socket_option_h option,
+	uint16_t miu)
 {
+	net_nfc_llcp_socket_option_s *struct_option =
+		(net_nfc_llcp_socket_option_s *)option;
+
 	if (option == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
-	net_nfc_llcp_socket_option_s * struct_option = (net_nfc_llcp_socket_option_s *)option;
 
 	struct_option->miu = miu;
-	return NET_NFC_OK;
 
+	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_llcp_socket_option_rw(net_nfc_llcp_socket_option_h option, uint8_t * rw)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_get_socket_option_rw(
+					net_nfc_llcp_socket_option_h option,
+					uint8_t *rw)
 {
 	if (option == NULL || rw == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
-	net_nfc_llcp_socket_option_s * struct_option = (net_nfc_llcp_socket_option_s *)option;
+	net_nfc_llcp_socket_option_s *struct_option = (net_nfc_llcp_socket_option_s *)option;
 
 	*rw = struct_option->rw;
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_set_llcp_socket_option_rw(net_nfc_llcp_socket_option_h option, uint8_t rw)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_set_socket_option_rw(
+					net_nfc_llcp_socket_option_h option,
+					uint8_t rw)
 {
 	if (option == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
-	net_nfc_llcp_socket_option_s * struct_option = (net_nfc_llcp_socket_option_s *)option;
+	net_nfc_llcp_socket_option_s *struct_option = (net_nfc_llcp_socket_option_s *)option;
 
 	struct_option->rw = rw;
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_llcp_socket_option_type(net_nfc_llcp_socket_option_h option, net_nfc_socket_type_e * type)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_get_socket_option_type(
+					net_nfc_llcp_socket_option_h option,
+					net_nfc_socket_type_e * type)
 {
 	if (option == NULL || type == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
-	net_nfc_llcp_socket_option_s * struct_option = (net_nfc_llcp_socket_option_s *)option;
+	net_nfc_llcp_socket_option_s *struct_option = (net_nfc_llcp_socket_option_s *)option;
 
 	*type = struct_option->type;
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_set_llcp_socket_option_type(net_nfc_llcp_socket_option_h option, net_nfc_socket_type_e type)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_set_socket_option_type(
+					net_nfc_llcp_socket_option_h option,
+					net_nfc_socket_type_e type)
 {
 	if (option == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
-	net_nfc_llcp_socket_option_s * struct_option = (net_nfc_llcp_socket_option_s *)option;
+	net_nfc_llcp_socket_option_s *struct_option = (net_nfc_llcp_socket_option_s *)option;
 
 	struct_option->type = type;
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_free_llcp_socket_option(net_nfc_llcp_socket_option_h option)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_free_socket_option(
+					net_nfc_llcp_socket_option_h option)
 {
 	if (option == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	_net_nfc_client_util_free_mem(option);
+	_net_nfc_util_free_mem(option);
 
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_create_llcp_configure(net_nfc_llcp_config_info_h * config, uint16_t miu, uint16_t wks, uint8_t lto, uint8_t option)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_create_config(
+					net_nfc_llcp_config_info_h *config,
+					uint16_t miu,
+					uint16_t wks,
+					uint8_t lto,
+					uint8_t option)
 {
 	if (config == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	net_nfc_llcp_config_info_s ** config_private = (net_nfc_llcp_config_info_s **)config;
+	net_nfc_llcp_config_info_s **tmp_config =
+						(net_nfc_llcp_config_info_s **)config;
 
-	_net_nfc_client_util_alloc_mem(*config_private, sizeof (net_nfc_llcp_config_info_s));
-	if (*config_private == NULL)
+	_net_nfc_util_alloc_mem(*tmp_config,
+					sizeof(net_nfc_llcp_config_info_s));
+
+	if (*tmp_config == NULL)
 		return NET_NFC_ALLOC_FAIL;
 
-	(*config_private)->miu = miu;
-	(*config_private)->wks = wks;
-	(*config_private)->lto = lto;
-	(*config_private)->option = option;
+	(*tmp_config)->miu = miu;
+	(*tmp_config)->wks = wks;
+	(*tmp_config)->lto = lto;
+	(*tmp_config)->option = option;
 
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_create_llcp_configure_default(net_nfc_llcp_config_info_h * config)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_create_config_default(net_nfc_llcp_config_info_h *config)
 {
-	return net_nfc_create_llcp_configure(config, 128, 1, 10, 0);
+	return net_nfc_client_llcp_create_config(config, 128, 1, 10, 0);
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_llcp_configure_miu(net_nfc_llcp_config_info_h config, uint16_t * miu)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_get_config_miu(
+					net_nfc_llcp_config_info_h config,
+					uint16_t *miu)
 {
 	if (config == NULL || miu == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	net_nfc_llcp_config_info_s * config_private = (net_nfc_llcp_config_info_s *)config;
-	*miu = config_private->miu;
+	net_nfc_llcp_config_info_s *tmp_config =
+						(net_nfc_llcp_config_info_s *)config;
+
+	*miu = tmp_config->miu;
 
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_llcp_configure_wks(net_nfc_llcp_config_info_h config, uint16_t * wks)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_get_config_wks(
+					net_nfc_llcp_config_info_h config,
+					uint16_t *wks)
 {
 	if (config == NULL || wks == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	net_nfc_llcp_config_info_s * config_private = (net_nfc_llcp_config_info_s *)config;
-	*wks = config_private->wks;
+	net_nfc_llcp_config_info_s *tmp_config =
+						(net_nfc_llcp_config_info_s *)config;
+
+	*wks = tmp_config->wks;
 
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_llcp_configure_lto(net_nfc_llcp_config_info_h config, uint8_t * lto)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_get_config_lto(
+						net_nfc_llcp_config_info_h config,
+						uint8_t *lto)
 {
 	if (config == NULL || lto == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	net_nfc_llcp_config_info_s * config_private = (net_nfc_llcp_config_info_s *)config;
-	*lto = config_private->lto;
+	net_nfc_llcp_config_info_s *tmp_config =
+						(net_nfc_llcp_config_info_s *)config;
+
+	*lto = tmp_config->lto;
 
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_llcp_configure_option(net_nfc_llcp_config_info_h config, uint8_t * option)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_get_config_option(
+					net_nfc_llcp_config_info_h config,
+					uint8_t *option)
 {
 	if (config == NULL || option == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	net_nfc_llcp_config_info_s * config_private = (net_nfc_llcp_config_info_s *)config;
-	*option = config_private->option;
+	net_nfc_llcp_config_info_s *tmp_config =
+						(net_nfc_llcp_config_info_s *)config;
+
+	*option = tmp_config->option;
 
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_set_llcp_configure_miu(net_nfc_llcp_config_info_h config, uint16_t miu)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_set_config_miu(
+					net_nfc_llcp_config_info_h config,
+					uint16_t miu)
 {
 	if (config == NULL)
 	{
@@ -992,77 +2413,121 @@ NET_NFC_EXPORT_API net_nfc_error_e net_nfc_set_llcp_configure_miu(net_nfc_llcp_c
 		return NET_NFC_OUT_OF_BOUND;
 	}
 
-	net_nfc_llcp_config_info_s * config_private = (net_nfc_llcp_config_info_s *)config;
-	config_private->miu = miu;
+	net_nfc_llcp_config_info_s * tmp_config =
+						(net_nfc_llcp_config_info_s *)config;
+
+	tmp_config->miu = miu;
 
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_set_llcp_configure_wks(net_nfc_llcp_config_info_h config, uint16_t wks)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_set_config_wks(
+					net_nfc_llcp_config_info_h config,
+					uint16_t wks)
 {
 	if (config == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	net_nfc_llcp_config_info_s * config_private = (net_nfc_llcp_config_info_s *)config;
-	config_private->wks = wks;
+	net_nfc_llcp_config_info_s *tmp_config =
+						(net_nfc_llcp_config_info_s *)config;
+
+	tmp_config->wks = wks;
 
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_set_llcp_configure_lto(net_nfc_llcp_config_info_h config, uint8_t lto)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_set_config_lto(
+					net_nfc_llcp_config_info_h config,
+					uint8_t lto)
 {
 	if (config == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	net_nfc_llcp_config_info_s * config_private = (net_nfc_llcp_config_info_s *)config;
-	config_private->lto = lto;
+	net_nfc_llcp_config_info_s *tmp_config =
+						(net_nfc_llcp_config_info_s *)config;
+
+	tmp_config->lto = lto;
 
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_set_llcp_configure_option(net_nfc_llcp_config_info_h config, uint8_t option)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_set_config_option(
+					net_nfc_llcp_config_info_h config,
+					uint8_t option)
 {
 	if (config == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	net_nfc_llcp_config_info_s * config_private = (net_nfc_llcp_config_info_s *)config;
-	config_private->option = option;
+	net_nfc_llcp_config_info_s * tmp_config =
+						(net_nfc_llcp_config_info_s *)config;
+
+	tmp_config->option = option;
 
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_free_llcp_configure(net_nfc_llcp_config_info_h config)
+NET_NFC_EXPORT_API
+net_nfc_error_e net_nfc_client_llcp_free_config(net_nfc_llcp_config_info_h config)
 {
 	if (config == NULL)
 	{
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	_net_nfc_client_util_free_mem(config);
+	_net_nfc_util_free_mem(config);
 	return NET_NFC_OK;
 }
 
-NET_NFC_EXPORT_API net_nfc_error_e net_nfc_get_current_target_handle(void* trans_param)
+net_nfc_error_e net_nfc_client_llcp_init(void)
 {
-	net_nfc_error_e result = NET_NFC_OK;
-	net_nfc_request_get_current_target_handle_t request = { 0, };
+	GError *error = NULL;
 
-	request.length = sizeof(net_nfc_request_get_current_target_handle_t);
-	request.request_type = NET_NFC_MESSAGE_GET_CURRENT_TARGET_HANDLE;
-	request.trans_param = trans_param;
+	if (llcp_proxy)
+	{
+		DEBUG_CLIENT_MSG("Already initialized");
 
-	result = _net_nfc_client_send_reqeust((net_nfc_request_msg_t *)&request, NULL);
+		return NET_NFC_OK;
+	}
 
-	return result;
+	llcp_proxy = net_nfc_gdbus_llcp_proxy_new_for_bus_sync(
+			G_BUS_TYPE_SYSTEM,
+			G_DBUS_PROXY_FLAGS_DO_NOT_AUTO_START,
+			"org.tizen.NetNfcService",
+			"/org/tizen/NetNfcService/Llcp",
+			NULL,
+			&error);
+	if (llcp_proxy == NULL)
+	{
+		DEBUG_ERR_MSG("Can not create proxy : %s", error->message);
+
+		g_error_free(error);
+
+		return NET_NFC_UNKNOWN_ERROR;
+	}
+
+	g_signal_connect(llcp_proxy, "error",
+			G_CALLBACK(llcp_error), NULL);
+
+	g_signal_connect(llcp_proxy, "incoming",
+			G_CALLBACK(llcp_incoming), NULL);
+
+	return NET_NFC_OK;
 }
 
-void _net_nfc_set_llcp_current_target_id(net_nfc_target_handle_s * handle)
+void net_nfc_client_llcp_deinit(void)
 {
-	current_target = handle;
+	if (llcp_proxy)
+	{
+		g_object_unref(llcp_proxy);
+		llcp_proxy = NULL;
+	}
 }

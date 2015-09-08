@@ -1,124 +1,223 @@
 Name:       nfc-manager
 Summary:    NFC framework manager
-Version:    0.0.3
-Release:    11
+Version:    0.1.92
+Release:    0
 Group:      libs
-License:    Samsung Proprietary License
+License:    Flora-1.1
 Source0:    %{name}-%{version}.tar.gz
-Source1:    libnfc-manager-0.init.in
+Source1:    nfc-manager.service
+Requires:   sys-assert
+BuildRequires: cmake
 BuildRequires: pkgconfig(aul)
 BuildRequires: pkgconfig(glib-2.0)
 BuildRequires: pkgconfig(gobject-2.0)
 BuildRequires: pkgconfig(security-server)
-BuildRequires: pkgconfig(dbus-glib-1)
 BuildRequires: pkgconfig(vconf)
 BuildRequires: pkgconfig(dlog)
 BuildRequires: pkgconfig(tapi)
-BuildRequires: pkgconfig(ecore)
 BuildRequires: pkgconfig(bluetooth-api)
+BuildRequires: pkgconfig(capi-network-bluetooth)
 BuildRequires: pkgconfig(mm-sound)
 BuildRequires: pkgconfig(appsvc)
-BuildRequires: pkgconfig(heynoti)
-BuildRequires: pkgconfig(svi)
-BuildRequires: pkgconfig(smartcard-service)
-BuildRequires: pkgconfig(smartcard-service-common)
-BuildRequires: pkgconfig(libssl)
-BuildRequires: pkgconfig(pmapi)
-BuildRequires: cmake
-BuildRequires: gettext-tools
+BuildRequires: pkgconfig(feedback)
+BuildRequires: pkgconfig(capi-media-wav-player)
+BuildRequires: pkgconfig(openssl)
+BuildRequires: pkgconfig(deviced)
+BuildRequires: pkgconfig(ecore-x)
+BuildRequires: pkgconfig(mm-keysound)
+BuildRequires: pkgconfig(syspopup-caller)
+BuildRequires: pkgconfig(notification)
+BuildRequires: pkgconfig(capi-network-wifi)
+BuildRequires: pkgconfig(capi-network-wifi-direct)
+BuildRequires: pkgconfig(capi-system-info)
+BuildRequires: pkgconfig(sqlite3)
+BuildRequires: pkgconfig(pkgmgr-info)
+BuildRequires: pkgconfig(libxml-2.0)
+BuildRequires: pkgconfig(libcurl)
+BuildRequires: python
+BuildRequires: python-xml
 Requires(post):   /sbin/ldconfig
 Requires(post):   /usr/bin/vconftool
-requires(postun): /sbin/ldconfig
+Requires(postun): /sbin/ldconfig
+
+
 %description
 NFC library Manager.
+
 
 %prep
 %setup -q
 
-%package devel
-Summary:    Download agent
-Group:      Development/Libraries
-Requires:   %{name} = %{version}-%{release}
-
-%description devel
-NFC library Manager (devel)
 
 %package -n nfc-common-lib
 Summary:    NFC common library
 Group:      Development/Libraries
-Requires:   %{name} = %{version}-%{release}
+
 
 %description -n nfc-common-lib
 NFC Common library.
 
+
 %package -n nfc-common-lib-devel
 Summary:    NFC common library (devel)
 Group:      libs
-Requires:   %{name} = %{version}-%{release}
+Requires:   nfc-common-lib = %{version}-%{release}
+
 
 %description -n nfc-common-lib-devel
 NFC common library (devel)
 
 
-%build
-export LDFLAGS+="-Wl,--rpath=%{_prefix}/lib -Wl,--as-needed"
-mkdir cmake_tmp
-cd cmake_tmp
-LDFLAGS="$LDFLAGS" cmake .. -DCMAKE_INSTALL_PREFIX=%{_prefix}
+%package -n nfc-client-lib
+Summary:    NFC client library
+Group:      Development/Libraries
+Requires:   nfc-common-lib = %{version}-%{release}
 
-make 
+
+%description -n nfc-client-lib
+NFC Client library.
+
+
+%package -n nfc-client-lib-devel
+Summary:    NFC client library (devel)
+Group:      libs
+Requires:   nfc-client-lib = %{version}-%{release}
+
+
+%description -n nfc-client-lib-devel
+NFC client library (devel)
+
+
+#%%package -n nfc-client-test
+#Summary:    NFC client test
+#Group:      Development/Libraries
+#Requires:   %{name} = %{version}-%{release}
+#
+#
+#%%description -n nfc-client-test
+#NFC client test (devel)
+
+
+%build
+export CFLAGS="$CFLAGS -DTIZEN_DEBUG_ENABLE"
+export CXXFLAGS="$CXXFLAGS -DTIZEN_DEBUG_ENABLE"
+export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
+export CFLAGS="$CFLAGS -DTIZEN_TELEPHONY_ENABLED"
+
+export LDFLAGS+="-Wl,--rpath=%{_prefix}/lib -Wl,--as-needed"
+LDFLAGS="$LDFLAGS" cmake . \
+		-DTIZEN_ENGINEER_MODE=1 \
+		-DCMAKE_INSTALL_PREFIX=%{_prefix} \
+		-DTIZEN_TELEPHONY_ENABLED=1 \
 
 %install
-cd cmake_tmp
 %make_install
-%__mkdir -p  %{buildroot}/etc/init.d/
-%__cp -af %SOURCE1  %{buildroot}/etc/init.d/libnfc-manager-0
-chmod 755 %{buildroot}/etc/init.d/libnfc-manager-0
+
+mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
+cp -af %{SOURCE1} %{buildroot}%{_libdir}/systemd/system/
+
+mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
+ln -s ../%{name}.service %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/%{name}.service
+
+install -D -m 0644 LICENSE.Flora  %{buildroot}/%{_datadir}/license/nfc-common-lib
+install -D -m 0644 LICENSE.Flora  %{buildroot}/%{_datadir}/license/%{name}
+install -D -m 0644 LICENSE.Flora  %{buildroot}/%{_datadir}/license/nfc-client-lib
+#install -D -m 0644 LICENSE.Flora  %{buildroot}/%{_datadir}/license/nfc-client-test
+
 
 %post
 /sbin/ldconfig
-vconftool set -t bool -f db/nfc/feature 1 -u 5000
-vconftool set -t bool db/nfc/enable 0 -u 5000
-vconftool set -t bool db/nfc/sbeam 0 -u 5000
 
-vconftool set -t bool memory/private/nfc-manager/popup_disabled 0 -u 5000
+mkdir -p /opt/usr/share/nfc_debug
+chown :5000 /opt/usr/share/nfc_debug
+chmod 775 /opt/usr/share/nfc_debug
 
-ln -s /etc/init.d/libnfc-manager-0 /etc/rc.d/rc3.d/S81libnfc-manager-0
-ln -s /etc/init.d/libnfc-manager-0 /etc/rc.d/rc5.d/S81libnfc-manager-0
+mkdir -p /opt/usr/share/nfc-manager-daemon
+chown :5000 /opt/usr/share/nfc-manager-daemon
+chmod 775 /opt/usr/share/nfc-manager-daemon
+
+mkdir -p -m 755 /opt/usr/share/nfc-manager-daemon/message
+chown :5000 /opt/usr/share/nfc-manager-daemon/message
+
+systemctl daemon-reload
+if [ $1 == 1 ]; then
+    systemctl restart %{name}.service
+fi
+
+
+%post -n nfc-client-lib
+/sbin/ldconfig
+vconftool set -t bool db/nfc/feature 0 -u 5000 -f -s system::vconf_network
+vconftool set -t bool db/nfc/predefined_item_state 0 -u 5000 -f -s nfc-manager
+vconftool set -t string db/nfc/predefined_item "None" -u 5000 -f -s nfc-manager
+
+vconftool set -t bool db/nfc/enable 1 -u 5000 -f -s system::vconf_network
+vconftool set -t int db/nfc/se_type 3 -u 5000 -f -s nfc-manager
+vconftool set -t int db/nfc/wallet_mode 3 -u 5000 -f -s nfc-manager::admin
+vconftool set -t bool db/nfc/state_by_flight 0 -u 5000 -f -s system::vconf_network
+
 
 %postun
 /sbin/ldconfig
-mkdir -p /etc/rc.d/rc3.d
-mkdir -p /etc/rc.d/rc5.d
-rm -f /etc/rc.d/rc3.d/S81libnfc-manager-0
-rm -f /etc/rc.d/rc5.d/S81libnfc-manager-0
+
+if [ $1 == 0 ]; then
+    systemctl stop %{name}.service
+fi
+systemctl daemon-reload
+
 
 %post -n nfc-common-lib -p /sbin/ldconfig
 
+
 %postun -n nfc-common-lib -p /sbin/ldconfig
 
-%files
-%defattr(-,root,root,-)
-%{_libdir}/libnfc.so.1
-%{_libdir}/libnfc.so.1.0.0
-%{_prefix}/bin/nfc-manager-daemon
-%{_prefix}/bin/ndef-tool
-/etc/init.d/libnfc-manager-0
 
-%files devel
+%files
+%manifest %{name}.manifest
+%defattr(-,root,root,-)
+%{_bindir}/nfc-manager-daemon
+%{_bindir}/ndef-tool
+#%{_bindir}/nfc_client
+%{_libdir}/systemd/system/%{name}.service
+%{_libdir}/systemd/system/multi-user.target.wants/%{name}.service
+%{_datadir}/dbus-1/services/org.tizen.NetNfcService.service
+%{_datadir}/license/%{name}
+
+
+%files -n nfc-client-lib
+%manifest nfc-client-lib.manifest
+%defattr(-,root,root,-)
+%{_libdir}/libnfc.so
+%{_libdir}/libnfc.so.*
+%{_datadir}/license/nfc-client-lib
+
+
+%files -n nfc-client-lib-devel
+%manifest nfc-client-lib-devel.manifest
 %defattr(-,root,root,-)
 %{_libdir}/pkgconfig/nfc.pc
 %{_includedir}/nfc/*.h
-%{_libdir}/libnfc.so
 
 
 %files -n nfc-common-lib
-%defattr(-,root,root,-)
-%{_libdir}/libnfc-common-lib.so.1
-%{_libdir}/libnfc-common-lib.so.1.0.0
-
-%files -n nfc-common-lib-devel
+%manifest nfc-common-lib.manifest
 %defattr(-,root,root,-)
 %{_libdir}/libnfc-common-lib.so
+%{_libdir}/libnfc-common-lib.so.*
+/usr/etc/package-manager/parserlib/metadata/libhce_plugin.so
+%{_datadir}/license/nfc-common-lib
+%{_datadir}/nfc-manager-daemon/sounds/Operation_sdk.wav
+
+
+%files -n nfc-common-lib-devel
+%manifest nfc-common-lib-devel.manifest
+%defattr(-,root,root,-)
 %{_libdir}/pkgconfig/nfc-common-lib.pc
 %{_includedir}/nfc-common-lib/*.h
+
+
+#%%files -n nfc-client-test
+#%%manifest nfc-client-test.manifest
+#%%defattr(-,root,root,-)
+#%%{_bindir}/nfc_client
+#%%{_datadir}/license/nfc-client-test

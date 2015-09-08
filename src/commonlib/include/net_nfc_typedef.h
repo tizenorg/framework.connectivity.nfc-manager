@@ -1,19 +1,20 @@
 /*
-  * Copyright 2012  Samsung Electronics Co., Ltd
-  *
-  * Licensed under the Flora License, Version 1.0 (the "License");
-  * you may not use this file except in compliance with the License.
-  * You may obtain a copy of the License at
-
-  *     http://www.tizenopensource.org/license
-  *
-  * Unless required by applicable law or agreed to in writing, software
-  * distributed under the License is distributed on an "AS IS" BASIS,
-  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  * See the License for the specific language governing permissions and
-  * limitations under the License.
-  */
-
+ * Copyright (c) 2012, 2013 Samsung Electronics Co., Ltd.
+ *
+ * Licensed under the Flora License, Version 1.1 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://floralicense.org/license/
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef __NET_NFC_TYPEDEF_H__
+#define __NET_NFC_TYPEDEF_H__
 
 /**
  NFC Manager
@@ -24,9 +25,6 @@
  @version		0.1
 
  */
-
-#ifndef __NET_NFC_TYPEDEF_H__
-#define __NET_NFC_TYPEDEF_H__
 
 /**
  @defgroup NET_NFC_MANAGER The description of NFC Manager
@@ -122,6 +120,8 @@ typedef enum
 /*970*/NET_NFC_TAG_IS_ALREADY_FORMATTED, /** Target is already formatted */
 /*969*/NET_NFC_NOT_REGISTERED, /**< removal is requested but requested data is not registered */
 /*968*/NET_NFC_INVALID_PARAM, /**< removal is requested but requested data is not registered */
+/*967*/NET_NFC_PERMISSION_DENIED, /**< privilege check is failed */
+/*966*/NET_NFC_NOT_ACTIVATED, /**< Application tries to request without activation */
 /*499*/NET_NFC_NDEF_TYPE_LENGTH_IS_NOT_OK = -499, /**< Illegal ndef record type length */
 /*498*/NET_NFC_NDEF_PAYLOAD_LENGTH_IS_NOT_OK, /**< Illegal ndef record payload length */
 /*497*/NET_NFC_NDEF_ID_LENGTH_IS_NOT_OK, /**< Illegal ndef record id length */
@@ -181,7 +181,7 @@ typedef enum
 	NET_NFC_MESSAGE_TAG_DETACHED, /**< Type: Notify Event, <br> When a tag or SE is disappeared, you got this event.
 	 	 	 	 	 	 	 	 	 <br> The data contains the target info , need to cast to net_nfc_target_info_h but it does not have detail target info
 	 	 	 	 	 	 	 	 	 <br> please, do not use "net_nfc_get_tag_info_keys" when you got this event*/
-	NET_NFC_MESSAGE_FORMAT_NDEF, /**< Type: Response Event <br> After complete "net_nfc_format_ndef", this event is delivered */
+/*10*/	NET_NFC_MESSAGE_FORMAT_NDEF, /**< Type: Response Event <br> After complete "net_nfc_format_ndef", this event is delivered */
 	NET_NFC_MESSAGE_LLCP_DISCOVERED,/**< Type: Notify Event <br> When LLCP is discovered and remote device is support llcp, you receive this event
 	 	 	 	 	 	 	 	 	 <br> data pointer contains the remote llcp configuration info. Cast to net_nfc_llcp_config_info_h*/
 	NET_NFC_MESSAGE_P2P_DETACHED, /**< Type: Notify Event <br> When LLCP is de-activated by removing the device, you receive this event*/
@@ -194,28 +194,46 @@ typedef enum
 	NET_NFC_MESSAGE_SE_START_TRANSACTION, /**< Type: Notify Event, indicates external reader start transaction*/
 	NET_NFC_MESSAGE_SE_END_TRANSACTION, /**< Type: Notify Event, indicates external reader end transaction*/
 	NET_NFC_MESSAGE_SE_TYPE_TRANSACTION, /**< Type: Notify Event, Indicates external reader trying to access secure element */
-	NET_NFC_MESSAGE_SE_CONNECTIVITY, /**< Type: Notify Event, This event notifies the terminal host that it shall send a connectivity event from UICC */
+/*20*/	NET_NFC_MESSAGE_SE_CONNECTIVITY, /**< Type: Notify Event, This event notifies the terminal host that it shall send a connectivity event from UICC */
 	NET_NFC_MESSAGE_SE_FIELD_ON, /**< Type: Notify Event, indicates external reader field is on*/
 	NET_NFC_MESSAGE_SE_FIELD_OFF, /**< Type: Notify Event, indicates external reader field is off*/
-
+	NET_NFC_MESSAGE_SE_TYPE_CHANGED, /**< Type: Notify Event, indicates secure element type is changed*/
+	NET_NFC_MESSAGE_SE_CARD_EMULATION_CHANGED, /**< Type: Notify Event, indicates card emulation mode is changed*/
 	NET_NFC_MESSAGE_CONNECTION_HANDOVER, /**< Type: Response Event. <br> The result of connection handover. If it has been completed successfully, this event will include the information of alternative carrier. */
 
 	NET_NFC_MESSAGE_SET_SE,
 	NET_NFC_MESSAGE_GET_SE,
 	NET_NFC_MESSAGE_OPEN_INTERNAL_SE,
 	NET_NFC_MESSAGE_CLOSE_INTERNAL_SE,
-	NET_NFC_MESSAGE_SEND_APDU_SE,
+/*30*/	NET_NFC_MESSAGE_SEND_APDU_SE,
+	NET_NFC_MESSAGE_GET_ATR_SE,
 	NET_NFC_GET_SERVER_STATE,
 
 	NET_NFC_MESSAGE_SIM_TEST,
 
-	NET_NFC_MESSAGE_INIT,/*31*/
+	NET_NFC_MESSAGE_INIT,
 	NET_NFC_MESSAGE_DEINIT,
 
 	NET_NFC_MESSAGE_PRBS_TEST,
 
 	NET_NFC_MESSAGE_GET_FIRMWARE_VERSION,
 
+	NET_NFC_MESSAGE_SET_EEDATA,
+
+	NET_NFC_MESSAGE_SNEP_START_SERVER,
+	NET_NFC_MESSAGE_SNEP_START_CLIENT,
+/*40*/	NET_NFC_MESSAGE_SNEP_REQUEST,
+	NET_NFC_MESSAGE_SNEP_STOP_SERVICE,
+	NET_NFC_MESSAGE_SNEP_REGISTER_SERVER,
+	NET_NFC_MESSAGE_SNEP_UNREGISTER_SERVER,
+
+	NET_NFC_MESSAGE_CONNECT,
+	NET_NFC_MESSAGE_DISCONNECT,
+	NET_NFC_MESSAGE_SET_CARD_EMULATION,
+
+/*47*/	NET_NFC_MESSAGE_ROUTING_HOST_EMU_ACTIVATED,
+	NET_NFC_MESSAGE_ROUTING_HOST_EMU_DEACTIVATED,
+	NET_NFC_MESSAGE_ROUTING_HOST_EMU_DATA,
 } net_nfc_message_e;
 
 typedef enum
@@ -239,6 +257,8 @@ typedef enum
 	NET_NFC_FELICA_PICC,
 	NET_NFC_JEWEL_PICC,
 	NET_NFC_ISO15693_PICC,
+	NET_NFC_BARCODE_128_PICC,
+	NET_NFC_BARCODE_256_PICC,
 
 	/* NFC-IP1 Device Types */
 	NET_NFC_NFCIP1_TARGET,
@@ -349,7 +369,12 @@ typedef enum
 	 	 	 	 	 	 	 	 	 <br> data pointer contains received data (Cast to data_h)*/
 	NET_NFC_MESSAGE_LLCP_RECEIVE_FROM, /**< Type: Response Event,<br>  "net_nfc_receive_llcp_from" operation is completed (connectionless mode)*/
 	NET_NFC_MESSAGE_LLCP_DISCONNECT, /**< Type: Response Event,<br>  "net_nfc_disconnect_llcp" request is completed */
-	NET_NFC_MESSAGE_LLCP_ERROR, /**< Type: Notify Event,<br>  when the socket is disconnected or rejected, you may receive this event */
+	NET_NFC_MESSAGE_LLCP_ERROR, /**< Type: Notify Event,<br>  when the socket is disconnected, you may receive this event */
+	NET_NFC_MESSAGE_LLCP_CONNECT_REQ, /**< Type: Notify Event,<br> when the peer requests connect, you may receive this event */
+	NET_NFC_MESSAGE_LLCP_ACCEPT, /**< Type: Response Event <br> this event indicates "net_nfc_accept_llcp" requested is completed*/
+	NET_NFC_MESSAGE_LLCP_REJECT, /**< Type: Response Event <br> this event indicates "net_nfc_reject_llcp" requested is completed*/
+	NET_NFC_MESSAGE_LLCP_REJECTED, /**< Type: Notify Event,<br> when the socket is rejected, you may receive this event */
+	NET_NFC_MESSAGE_LLCP_CLOSE, /**< Type: Response Event,<br>  "net_nfc_close_llcp_socket" request is completed */
 
 } net_nfc_llcp_message_e;
 
@@ -365,27 +390,29 @@ typedef enum
 	NET_NFC_NPP,
 } llcp_app_protocol_e;
 
-typedef struct data_s *data_h;
+typedef struct _data_s *data_h;
 
-typedef struct ndef_record_s *ndef_record_h;
+typedef struct _ndef_record_s *ndef_record_h;
 
-typedef struct ndef_message_s *ndef_message_h;
+typedef struct _ndef_message_s *ndef_message_h;
 
-typedef struct net_nfc_target_info_s *net_nfc_target_info_h;
+typedef struct _net_nfc_target_info_s *net_nfc_target_info_h;
 
 typedef uint32_t net_nfc_traceive_cmd;
 
-typedef struct net_nfc_llcp_config_info_s *net_nfc_llcp_config_info_h;
+typedef struct _net_nfc_llcp_config_info_s *net_nfc_llcp_config_info_h;
 
-typedef struct net_nfc_llcp_socket_option_s *net_nfc_llcp_socket_option_h;
+typedef struct _net_nfc_llcp_socket_option_s *net_nfc_llcp_socket_option_h;
 
-typedef struct net_nfc_target_handle_s *net_nfc_target_handle_h;
+typedef struct _net_nfc_target_handle_s *net_nfc_target_handle_h;
 
-typedef struct net_nfc_connection_handover_info_s *net_nfc_connection_handover_info_h;
+typedef struct _net_nfc_connection_handover_info_s *net_nfc_connection_handover_info_h;
 
 typedef uint8_t sap_t;
 
 typedef uint32_t net_nfc_llcp_socket_t;
+
+typedef void *net_nfc_snep_handle_h;
 
 // LLCP Callback
 typedef void (*net_nfc_llcp_socket_cb)(net_nfc_llcp_message_e message, net_nfc_error_e result, void *data, void *user_data, void *trans_data);
@@ -397,29 +424,17 @@ typedef void (*net_nfc_internal_se_response_cb)(net_nfc_message_e message, net_n
 
 typedef void (* net_nfc_set_activation_completed_cb)(net_nfc_error_e error, void *user_data);
 
-// for data exchanger
-
-typedef enum
-{
-	NET_NFC_EXCHANGER_DATA_REQUESTED = 0x00,
-	NET_NFC_EXCHANGER_TRANSFER_COMPLETED,
-	NET_NFC_EXCHANGER_TRANSFER_FAILED,
-} net_nfc_exchanger_event_e;
-
-typedef enum
-{
-	NET_NFC_EXCHANGER_RAW,
-} net_nfc_exchanger_data_type_e;
-
-typedef struct net_nfc_exchanger_data_s *net_nfc_exchanger_data_h;
-
-typedef net_nfc_exchanger_data_h (*net_nfc_exchanger_cb)(net_nfc_exchanger_event_e event, void *user_param);
+// handover
 
 typedef enum
 {
 	NET_NFC_CONN_HANDOVER_CARRIER_BT = 0x00,
-	NET_NFC_CONN_HANDOVER_CARRIER_WIFI_BSS, /* infrastructure */
-	NET_NFC_CONN_HANDOVER_CARRIER_WIFI_IBSS, /* add hoc */
+	NET_NFC_CONN_HANDOVER_CARRIER_WIFI_WPS, /* Wifi Protected Setup */
+#define NET_NFC_CONN_HANDOVER_CARRIER_WIFI_BSS NET_NFC_CONN_HANDOVER_CARRIER_WIFI_WPS
+	NET_NFC_CONN_HANDOVER_CARRIER_WIFI_P2P, /* Wifi Peer-to-Peer */
+#define NET_NFC_CONN_HANDOVER_CARRIER_WIFI_IBSS NET_NFC_CONN_HANDOVER_CARRIER_WIFI_P2P
+#define NET_NFC_CONN_HANDOVER_CARRIER_WIFI_DIRECT NET_NFC_CONN_HANDOVER_CARRIER_WIFI_P2P
+	NET_NFC_CONN_HANDOVER_CARRIER_BT_LE,
 	NET_NFC_CONN_HANDOVER_CARRIER_UNKNOWN,
 } net_nfc_conn_handover_carrier_type_e;
 
@@ -431,8 +446,8 @@ typedef enum
 	NET_NFC_CONN_HANDOVER_CARRIER_UNKNOWN_STATUS,
 } net_nfc_conn_handover_carrier_state_e;
 
-typedef struct net_nfc_conn_handover_carrier_info_s *net_nfc_conn_handover_carrier_info_h;
-typedef struct net_nfc_conn_handover_info_s *net_nfc_conn_handover_info_h;
+typedef struct _net_nfc_conn_handover_carrier_info_s *net_nfc_conn_handover_carrier_info_h;
+typedef struct _net_nfc_conn_handover_info_s *net_nfc_conn_handover_info_h;
 
 #define MIFARE_KEY_DEFAULT {(uint8_t)0xFF,(uint8_t)0xFF,(uint8_t)0xFF,(uint8_t)0xFF,(uint8_t)0xFF,(uint8_t)0xFF}
 #define MIFARE_KEY_APPLICATION_DIRECTORY {(uint8_t)0xA0,(uint8_t)0xA1,(uint8_t)0xA2,(uint8_t)0xA3,(uint8_t)0xA4,(uint8_t)0xA5}
@@ -468,6 +483,26 @@ typedef enum
 
 typedef enum
 {
+	NET_NFC_WIFI_P2P_ATTRIBUTE_MANUFACTURER = 0x1021,
+	NET_NFC_WIFI_P2P_ATTRIBUTE_MODEL_NAME = 0x1023,
+	NET_NFC_WIFI_P2P_ATTRIBUTE_MODEL_NUMBER = 0x1024,
+	NET_NFC_WIFI_P2P_ATTRIBUTE_OOB_DEVICE_PASSWORD = 0x102C,
+	NET_NFC_WIFI_P2P_ATTRIBUTE_RF_BANDS = 0x103C,
+	NET_NFC_WIFI_P2P_ATTRIBUTE_SERIAL_NUMBER = 0x1042,
+	NET_NFC_WIFI_P2P_ATTRIBUTE_UUID_E = 0x1047,
+	NET_NFC_WIFI_P2P_ATTRIBUTE_VEN_EXT = 0x1049,
+
+	NET_NFC_WIFI_P2P_ATTRIBUTE_CAPABILITY = 0x02,
+	NET_NFC_WIFI_P2P_ATTRIBUTE_DEVICE_INFO = 0x0D,
+	NET_NFC_WIFI_P2P_ATTRIBUTE_OOB_GROUP_OWNER_NEGO_CHANNEL = 0x13,
+	NET_NFC_WIFI_P2P_ATTRIBUTE_CHANNEL_LIST = 0x0B,
+	NET_NFC_WIFI_P2P_ATTRIBUTE_GROUP_INFO = 0x0E,
+	NET_NFC_WIFI_P2P_ATTRIBUTE_GROUP_ID = 0x0F,
+}
+net_nfc_carrier_wifi_p2p_attribute_e;
+
+typedef enum
+{
 	NET_NFC_BT_ATTRIBUTE_UUID16_PART = 0x02, /* More 16-bit UUIDs available */
 	NET_NFC_BT_ATTRIBUTE_UUID16 = 0x03, /* Complete list of 16-bit UUIDs */
 	NET_NFC_BT_ATTRIBUTE_UUID32_PART = 0x04, /* More 32-bit UUIDs available */
@@ -485,8 +520,11 @@ typedef enum
 	NET_NFC_BT_ATTRIBUTE_ADDRESS = 0xF0, /* Bluetooth device Address */
 } net_nfc_handover_bt_attribute_e;
 
-typedef struct net_nfc_carrier_config_s *net_nfc_carrier_config_h;
-typedef struct net_nfc_carrier_property_s *net_nfc_property_group_h;
+typedef struct _net_nfc_carrier_config_s *net_nfc_carrier_config_h;
+typedef struct _net_nfc_carrier_property_s *net_nfc_property_group_h;
+
+typedef struct _net_nfc_ch_message_s *net_nfc_ch_message_h;
+typedef struct _net_nfc_ch_carrier_s *net_nfc_ch_carrier_h;
 
 typedef enum
 {
@@ -494,6 +532,7 @@ typedef enum
 	NET_NFC_SE_TYPE_ESE = 0x01,/**< SmartMX */
 	NET_NFC_SE_TYPE_UICC = 0x02,/**< UICC */
 	NET_NFC_SE_TYPE_SDCARD = 0x03, /* SDCard type is not currently supported */
+	NET_NFC_SE_TYPE_HCE = 0x04, /* SDCard type is not currently supported */
 } net_nfc_se_type_e;
 
 typedef enum
@@ -513,6 +552,44 @@ typedef enum
 	NET_NFC_MAX_CERT_FORMAT,
 } net_nfc_cert_format_t;
 
+typedef enum
+{
+	NET_NFC_SNEP_GET = 1,
+	NET_NFC_SNEP_PUT = 2,
+} net_nfc_snep_type_t;
+
+typedef enum
+{
+	NET_NFC_LLCP_REGISTERED = -1,
+	NET_NFC_LLCP_UNREGISTERED = -2,
+	NET_NFC_LLCP_START  = -3,
+	NET_NFC_LLCP_STOP  = -4,
+}
+net_nfc_llcp_state_t;
+
+typedef enum
+{
+	NET_NFC_CARD_EMULATION_DISABLE = 0,
+	NET_NFC_CARD_EMELATION_ENABLE
+}
+net_nfc_card_emulation_mode_t;
+
+typedef enum
+{
+	NET_NFC_HCE_EVENT_DEACTIVATED = 0,
+	NET_NFC_HCE_EVENT_ACTIVATED = 1,
+	NET_NFC_HCE_EVENT_APDU_RECEIVED = 2,
+}
+net_nfc_hce_event_t;
+
+typedef enum
+{
+	NET_NFC_CARD_EMULATION_CATEGORY_UNKNOWN = 0,
+	NET_NFC_CARD_EMULATION_CATEGORY_PAYMENT = 1,
+	NET_NFC_CARD_EMULATION_CATEGORY_OTHER = 2,
+}
+net_nfc_card_emulation_category_t;
+
 #ifdef __cplusplus
 }
 #endif
@@ -521,5 +598,4 @@ typedef enum
  @}
  */
 
-#endif
-
+#endif //__NET_NFC_TYPEDEF_H__

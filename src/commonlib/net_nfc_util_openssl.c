@@ -1,11 +1,11 @@
 /*
-  * Copyright 2012  Samsung Electronics Co., Ltd
+  * Copyright (c) 2012, 2013 Samsung Electronics Co., Ltd.
   *
-  * Licensed under the Flora License, Version 1.0 (the "License");
+  * Licensed under the Flora License, Version 1.1 (the "License");
   * you may not use this file except in compliance with the License.
   * You may obtain a copy of the License at
 
-  *     http://www.tizenopensource.org/license
+  *     http://floralicense.org/license/
   *
   * Unless required by applicable law or agreed to in writing, software
   * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,10 +20,10 @@
 #include <openssl/pkcs12.h>
 #include <openssl/pem.h>
 
-#include "net_nfc_typedef_private.h"
-#include "net_nfc_debug_private.h"
-#include "net_nfc_util_private.h"
-#include "net_nfc_util_openssl_private.h"
+#include "net_nfc_typedef_internal.h"
+#include "net_nfc_debug_internal.h"
+#include "net_nfc_util_internal.h"
+#include "net_nfc_util_openssl_internal.h"
 
 //static X509 *_load_certificate_from_file(const char *file)
 //{
@@ -193,9 +193,10 @@ bool net_nfc_util_openssl_add_certificate_of_ca(net_nfc_openssl_verify_context_s
 	x509 = _load_certificate_from_mem(1, buffer, length, NULL);
 	if (x509 != NULL)
 	{
-		X509_STORE_add_cert(context->store, x509);
-
-		result = true;
+		if (X509_STORE_add_cert(context->store, x509))
+		{
+			result = true;
+		}
 	}
 
 	return result;
@@ -559,6 +560,9 @@ int net_nfc_util_openssl_verify_signature(uint32_t type, uint8_t *buffer, uint32
 
 	/* pkey */
 	X509 *x509 = _load_certificate_from_mem(0, cert, cert_len, NULL);
+	if(x509 == NULL)
+		return 0;
+
 	pkey = X509_PUBKEY_get(X509_get_X509_PUBKEY(x509));
 	X509_free(x509);
 
@@ -739,4 +743,152 @@ int net_nfc_util_get_cert_list_from_file(char *file_name, char *password, uint8_
 	}
 
 	return result;
+}
+
+bool net_nfc_util_openssl_encode_base64(const uint8_t *buffer, const uint32_t buf_len, char *result, uint32_t max_len, bool new_line_char)
+{
+	bool ret = false;
+	BUF_MEM *bptr;
+	BIO *b64, *bmem;
+
+	if (buffer == NULL || buf_len == 0)
+	{
+		return ret;
+	}
+
+	b64 = BIO_new(BIO_f_base64());
+	if(b64 == NULL)
+		return false;
+
+	bmem = BIO_new(BIO_s_mem());
+
+	if (new_line_char == false)
+		BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+
+	b64 = BIO_push(b64, bmem);
+
+	BIO_write(b64, buffer, buf_len);
+	BIO_flush(b64);
+	BIO_get_mem_ptr(b64, &bptr);
+
+	if (max_len >= bptr->length)
+	{
+		memcpy(result, bptr->data, bptr->length);
+		result[bptr->length] = 0;
+		ret = true;
+	}
+	else
+	{
+		DEBUG_ERR_MSG("not enough result buffer");
+	}
+
+	BIO_free_all(b64);
+
+	return ret;
+}
+
+bool net_nfc_util_openssl_decode_base64(const char *buffer, uint8_t *result, uint32_t *out_len, bool new_line_char)
+{
+	bool ret = false;
+	unsigned int length = 0;
+	char *temp;
+
+	if (buffer == NULL || (length = strlen(buffer)) == 0)
+	{
+		return ret;
+	}
+
+	_net_nfc_util_alloc_mem(temp, length);
+	if (temp != NULL)
+	{
+		BIO *b64, *bmem;
+
+		b64 = BIO_new(BIO_f_base64());
+		if(b64 == NULL)
+			return false;
+
+		bmem = BIO_new_mem_buf((void *)buffer, length);
+		if (new_line_char == false)
+			BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+		bmem = BIO_push(b64, bmem);
+
+		length = BIO_read(bmem, temp, length);
+
+		BIO_free_all(bmem);
+
+		if (*out_len > length && length > 0)
+		{
+			*out_len = length;
+			memcpy(result, temp, *out_len);
+			ret = true;
+		}
+		else
+		{
+			DEBUG_ERR_MSG("not enough result buffer");
+		}
+
+		_net_nfc_util_free_mem(temp);
+	}
+	else
+	{
+		DEBUG_ERR_MSG("alloc failed");
+	}
+
+	return ret;
+}
+
+bool net_nfc_util_openssl_digest(const char *algorithm, const uint8_t *buffer, const uint32_t buf_len, uint8_t *result, uint32_t *out_len)
+{
+	const EVP_MD *md;
+	unsigned char *temp;
+	bool ret = false;
+
+	if (algorithm == NULL || buffer == NULL || buf_len == 0)
+	{
+		return ret;
+	}
+
+	OpenSSL_add_all_digests();
+
+	if ((md = EVP_get_digestbyname(algorithm)) != NULL)
+	{
+		_net_nfc_util_alloc_mem(temp, EVP_MAX_MD_SIZE);
+		if (temp != NULL)
+		{
+			EVP_MD_CTX mdCtx;
+			unsigned int resultLen = 0;
+
+			memset(temp, 0, EVP_MAX_MD_SIZE);
+
+			EVP_DigestInit(&mdCtx, md);
+			if (EVP_DigestUpdate(&mdCtx, buffer, buf_len) != 0)
+			{
+				DEBUG_ERR_MSG("EVP_DigestUpdate failed");
+			}
+			EVP_DigestFinal(&mdCtx, temp, &resultLen);
+
+			if (*out_len >= resultLen)
+			{
+				*out_len = resultLen;
+				memcpy(result, temp, *out_len);
+				ret = true;
+			}
+			else
+			{
+				DEBUG_ERR_MSG("not enough result buffer");
+			}
+
+			_net_nfc_util_free_mem(temp);
+		}
+		else
+		{
+			DEBUG_ERR_MSG("alloc failed");
+		}
+	}
+	else
+	{
+		DEBUG_ERR_MSG("EVP_get_digestbyname(\"%s\") returns NULL", algorithm);
+	}
+
+	return ret;
 }

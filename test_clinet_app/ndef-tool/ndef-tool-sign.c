@@ -1,11 +1,11 @@
 /*
-  * Copyright 2012  Samsung Electronics Co., Ltd
+  * Copyright (c) 2012, 2013 Samsung Electronics Co., Ltd.
   *
-  * Licensed under the Flora License, Version 1.0 (the "License");
+  * Licensed under the Flora License, Version 1.1 (the "License");
   * you may not use this file except in compliance with the License.
   * You may obtain a copy of the License at
 
-  *     http://www.tizenopensource.org/license
+  *     http://floralicense.org/license/
   *
   * Unless required by applicable law or agreed to in writing, software
   * distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,7 +32,7 @@ bool ndef_tool_sign_message_from_file(const char *file_name, int begin_index, in
 	ndef_message_h msg = NULL;
 	int32_t count = 0;
 
-	if (ndef_tool_read_ndef_message_from_file(file_name, &msg) == 0)
+	if (ndef_tool_read_ndef_message_from_file(file_name, &msg) > 0)
 	{
 		net_nfc_get_ndef_message_record_count(msg, &count);
 
@@ -58,7 +58,7 @@ bool ndef_tool_verify_message_from_file(const char *file_name)
 	bool result = false;
 	ndef_message_h msg = NULL;
 
-	if (ndef_tool_read_ndef_message_from_file(file_name, &msg) == 0)
+	if (ndef_tool_read_ndef_message_from_file(file_name, &msg) > 0)
 	{
 		result = (net_nfc_verify_signature_ndef_message(msg) == 0);
 

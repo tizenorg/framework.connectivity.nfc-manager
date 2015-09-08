@@ -1,11 +1,11 @@
 /*
-  * Copyright 2012  Samsung Electronics Co., Ltd
+  * Copyright (c) 2012, 2013 Samsung Electronics Co., Ltd.
   *
-  * Licensed under the Flora License, Version 1.0 (the "License");
+  * Licensed under the Flora License, Version 1.1 (the "License");
   * you may not use this file except in compliance with the License.
   * You may obtain a copy of the License at
 
-  *     http://www.tizenopensource.org/license
+  *     http://floralicense.org/license/
   *
   * Unless required by applicable law or agreed to in writing, software
   * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,26 +21,45 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <glib.h>
 
 #include "net_nfc.h"
 #include "ndef-tool.h"
 
-void _on_completed_cb(net_nfc_error_e error, void *user_data)
+#if 0
+static GMainLoop *main_loop = NULL;
+void _activation_complete_cb(net_nfc_message_e message, net_nfc_error_e result,
+	void *data, void *user_param, void *trans_data)
 {
-	if (error == NET_NFC_OK)
-		fprintf(stdout, "power on success\n\n");
-	else
-		fprintf(stdout, "failed to power on (%d)\n\n", error);
-}
+	switch (message)
+	{
+	case NET_NFC_MESSAGE_INIT :
+		if (result == NET_NFC_OK)
+			fprintf(stdout, "power on success\n\n");
+		else
+			fprintf(stdout, "failed to power on (%d)\n\n", result);
 
-void _off_completed_cb(net_nfc_error_e error, void *user_data)
-{
-	if (error == NET_NFC_OK)
-		fprintf(stdout, "power off success\n\n");
-	else
-		fprintf(stdout, "failed to power off (%d)\n\n", error);
-}
+		net_nfc_unset_response_callback();
+		net_nfc_deinitialize();
+		g_main_loop_quit(main_loop);
+		break;
 
+	case NET_NFC_MESSAGE_DEINIT :
+		if (result == NET_NFC_OK)
+			fprintf(stdout, "power off success\n\n");
+		else
+			fprintf(stdout, "failed to power off (%d)\n\n", result);
+
+		net_nfc_unset_response_callback();
+		net_nfc_deinitialize();
+		g_main_loop_quit(main_loop);
+		break;
+
+	default :
+		break;
+	}
+}
+#endif
 int ndef_tool_read_ndef_message_from_file(const char *file_name, ndef_message_h *msg)
 {
 	int result = -1;
@@ -69,7 +88,7 @@ int ndef_tool_read_ndef_message_from_file(const char *file_name, ndef_message_h 
 
 				net_nfc_free_data(data);
 
-				result = 0;
+				result = file_size;
 			}
 		}
 
@@ -116,7 +135,11 @@ static void print_usage(char *file_name)
 	fprintf(stdout, "                                  MIME : MIME-type, URI : Absolute-URI)\n");
 	fprintf(stdout, "      -T, --type-data data       Input Type-field data\n");
 	fprintf(stdout, "      -I, --id-data data         Input ID-field data\n");
-	fprintf(stdout, "      -P, --payload-data data    Input Payload-field data\n");
+	fprintf(stdout, "      -P, --payload-data data    Input Payload-field data. You can input hexa-style data using '%%' prefix\n");
+	fprintf(stdout, "                                    ex) (0x20)abc  : %%20abc\n");
+	fprintf(stdout, "                                  it is possible to input '%%' by using '%%%%'\n");
+	fprintf(stdout, "                                    ex) 120%%20  : 120%%%%20\n");
+	fprintf(stdout, "          --payload-file file    Input Payload-field data from binary file\n");
 	fprintf(stdout, "      -E, --encoding data        Input encoding method of Well-known Text type record\n");
 	fprintf(stdout, "\n");
 	fprintf(stdout, "    -r, --remove-record          Remove a specific record from file\n");
@@ -129,13 +152,14 @@ static void print_usage(char *file_name)
 	fprintf(stdout, "      -b, --begin-index value    Input a beginning record index\n");
 	fprintf(stdout, "      -e, --end-index value      Input a last record index\n");
 	fprintf(stdout, "      -c, --cert-file file       Input a PKCS #12 certificate file (DER file, not PEM file)\n");
-	fprintf(stdout, "      -p, --password pass        Input a password ofPKCS #12 certificate file\n");
+	fprintf(stdout, "      -p, --password pass        Input a password of PKCS #12 certificate file\n");
 	fprintf(stdout, "\n");
 	fprintf(stdout, "    -v, --verify-signed-records  Verify signature in file\n");
 	fprintf(stdout, "        --read-tag               Read a ndef from tag and store to file\n");
 	fprintf(stdout, "        --write-tag              Write a ndef file to tag\n");
 	fprintf(stdout, "        --receive-ndef           Receive a ndef from target device and store to file\n");
 	fprintf(stdout, "        --send-ndef              Send a ndef file to target device\n");
+	fprintf(stdout, "        --handover               Try to handover another carrier\n");
 	fprintf(stdout, "\n");
 	fprintf(stdout, "    -h, --help                   Show this help messages\n");
 	fprintf(stdout, "\n");
@@ -185,7 +209,7 @@ static int _append_record_to_file(const char *file_name, ndef_record_h record)
 	int result = -1;
 	ndef_message_h msg = NULL;
 
-	if (ndef_tool_read_ndef_message_from_file(file_name, &msg) != 0)
+	if (ndef_tool_read_ndef_message_from_file(file_name, &msg) <= 0)
 	{
 		net_nfc_create_ndef_message(&msg);
 	}
@@ -259,7 +283,7 @@ bool _remove_record_from_file(const char *file_name, int index)
 	bool result = false;
 	ndef_message_h msg = NULL;
 
-	if (ndef_tool_read_ndef_message_from_file(file_name, &msg) == 0)
+	if (ndef_tool_read_ndef_message_from_file(file_name, &msg) > 0)
 	{
 		net_nfc_remove_record_by_index(msg, index);
 
@@ -345,6 +369,10 @@ int main(int argc, char *argv[])
 		{
 			operation = OPERATION_SEND_NDEF;
 		}
+		else if (__COMPARE_OPTION(argv[i], 0, "handover"))
+		{
+			operation = OPERATION_HANDOVER;
+		}
 		else if (__COMPARE_OPTION(argv[i], 0, "off")) /* hidden operation */
 		{
 			operation = OPERATION_OFF;
@@ -352,6 +380,18 @@ int main(int argc, char *argv[])
 		else if (__COMPARE_OPTION(argv[i], 0, "on")) /* hidden operation */
 		{
 			operation = OPERATION_ON;
+		}
+		else if (__COMPARE_OPTION(argv[i], 0, "send-apdu")) /* hidden operation */
+		{
+			operation = OPERATION_SEND_APDU;
+		}
+		else if (__COMPARE_OPTION(argv[i], 0, "set-se")) /* hidden operation */
+		{
+			operation = OPERATION_SET_SE;
+		}
+		else if (__COMPARE_OPTION(argv[i], 0, "get-atr")) /* hidden operation */
+		{
+			operation = OPERATION_GET_ATR;
 		}
 		else if (__COMPARE_OPTION(argv[i], 'i', "record-index"))
 		{
@@ -407,7 +447,99 @@ int main(int argc, char *argv[])
 			len = strlen(argv[i]);
 			if (len > 0)
 			{
-				net_nfc_create_data(&payload, (const uint8_t *)argv[i], len);
+				uint8_t *buffer = NULL;
+
+				buffer = calloc(1, len);
+				if (buffer != NULL)
+				{
+					int j, current = 0;
+
+					for (j = 0; j < len; j++)
+					{
+						if (argv[i][j] == '%')
+						{
+							if (j + 2 < len)
+							{
+								if (argv[i][j + 1] != '%')
+								{
+									char temp[3] = { 0, };
+
+									temp[0] = argv[i][j + 1];
+									temp[1] = argv[i][j + 2];
+
+									buffer[current++] = (uint8_t)strtol(temp, NULL, 16);
+									j += 2;
+								}
+								else
+								{
+									buffer[current++] = '%';
+									j++;
+								}
+							}
+							else if (j + 1 < len)
+							{
+								if (argv[i][j + 1] == '%')
+								{
+									buffer[current++] = '%';
+									j++;
+								}
+								else
+								{
+									buffer[current++] = argv[i][j];
+								}
+							}
+							else
+							{
+								/* invalid param. error? */
+							}
+						}
+						else
+						{
+							buffer[current++] = argv[i][j];
+						}
+					}
+
+					net_nfc_create_data(&payload, buffer, current);
+
+					free(buffer);
+				}
+			}
+		}
+		else if (__COMPARE_OPTION(argv[i], 0, "payload-file"))
+		{
+			__DO_NEXT_ARG;
+			len = strlen(argv[i]);
+			if (len > 0)
+			{
+				FILE *file = NULL;
+
+				file = fopen(argv[i], "rb");
+				if (file != NULL)
+				{
+					long int file_size = 0;
+					size_t read = 0;
+
+					fseek(file, 0, SEEK_END);
+					file_size = ftell(file);
+					fseek(file, 0, SEEK_SET);
+
+					if (file_size > 0)
+					{
+						uint8_t *buffer = NULL;
+
+						buffer = calloc(1, file_size);
+						if (buffer != NULL)
+						{
+							read = fread(buffer, 1, file_size, file);
+
+							net_nfc_create_data(&payload, buffer, read);
+
+							free(buffer);
+						}
+					}
+
+					fclose(file);
+				}
 			}
 		}
 		else if (__COMPARE_OPTION(argv[i], 'E', "encoding"))
@@ -451,6 +583,8 @@ int main(int argc, char *argv[])
 			if (record != NULL)
 			{
 				_append_record_to_file(file_name, record);
+
+				ndef_tool_display_ndef_message_from_file(file_name);
 			}
 			else
 			{
@@ -465,6 +599,7 @@ int main(int argc, char *argv[])
 
 	case OPERATION_REMOVE :
 		_remove_record_from_file(file_name, remove_index);
+		ndef_tool_display_ndef_message_from_file(file_name);
 		break;
 
 	case OPERATION_SIGN :
@@ -476,6 +611,7 @@ int main(int argc, char *argv[])
 		{
 			fprintf(stdout, "file : %s\ncert file : %s\npassword : %s\nbegin index : %d\nend index : %d\n", file_name, cert_file, password, begin_index, end_index);
 			ndef_tool_sign_message_from_file(file_name, begin_index, end_index, cert_file, password);
+			ndef_tool_display_ndef_message_from_file(file_name);
 		}
 		break;
 
@@ -499,6 +635,11 @@ int main(int argc, char *argv[])
 		ndef_tool_send_ndef_via_p2p(file_name);
 		break;
 
+	case OPERATION_HANDOVER :
+		ndef_tool_connection_handover(file_name);
+		break;
+
+#if 0
 	case OPERATION_ON :
 		{
 			int state = 0;
@@ -508,7 +649,19 @@ int main(int argc, char *argv[])
 			if (state == 0)
 			{
 				fprintf(stdout, "Power on....\n\n");
-				net_nfc_set_state(1, _on_completed_cb);
+
+				if(!g_thread_supported())
+				{
+					g_thread_init(NULL);
+				}
+
+				main_loop = g_main_new(true);
+
+				net_nfc_initialize();
+				net_nfc_set_response_callback(_activation_complete_cb, NULL);
+				net_nfc_set_state(true, NULL);
+
+				g_main_loop_run(main_loop);
 			}
 			else
 			{
@@ -526,13 +679,45 @@ int main(int argc, char *argv[])
 			if (state == 1)
 			{
 				fprintf(stdout, "Power off....\n\n");
-				net_nfc_set_state(0, _off_completed_cb);
+
+				if(!g_thread_supported())
+				{
+					g_thread_init(NULL);
+				}
+
+				main_loop = g_main_new(true);
+
+				net_nfc_initialize();
+				net_nfc_set_response_callback(_activation_complete_cb, NULL);
+				net_nfc_set_state(false, NULL);
+
+				g_main_loop_run(main_loop);
 			}
 			else
 			{
 				fprintf(stdout, "Already power is off.\n\n");
 			}
 		}
+		break;
+#endif
+	case OPERATION_SEND_APDU :
+		ndef_tool_send_apdu(file_name);
+		break;
+#if 0
+	case OPERATION_SET_SE :
+		net_nfc_initialize();
+
+		if (strcmp(file_name, "SIM1") == 0) {
+			net_nfc_set_secure_element_type(NET_NFC_SE_TYPE_UICC, NULL);
+		} else if (strcmp(file_name, "eSE") == 0) {
+			net_nfc_set_secure_element_type(NET_NFC_SE_TYPE_ESE, NULL);
+		} else {
+			fprintf(stdout, "Unknown SE name.\n\n");
+		}
+		break;
+#endif
+	case OPERATION_GET_ATR :
+		ndef_tool_get_atr();
 		break;
 
 	case OPERATION_ERROR :
@@ -543,4 +728,3 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
-

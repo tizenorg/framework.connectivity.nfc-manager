@@ -2,8 +2,20 @@ CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
 
 MESSAGE("build nfc-common-lib and nfc-manager")
 
-ADD_SUBDIRECTORY(src/commonlib)
-ADD_SUBDIRECTORY(src/manager)
-ADD_SUBDIRECTORY(src/clientlib)
-ADD_SUBDIRECTORY(test_clinet_app/ndef-tool)
+SET(PREFIX ${CMAKE_INSTALL_PREFIX})
+SET(LIBDIR "${PREFIX}/lib")
+SET(MODULEDIR "${LIBDIR}/nfc")
 
+ADD_DEFINITIONS("-D_GNU_SOURCE")
+ADD_DEFINITIONS("-DSECURITY_SERVER")
+
+ADD_SUBDIRECTORY(src/commonlib)
+ADD_SUBDIRECTORY(src/clientlib)
+ADD_SUBDIRECTORY(src/manager)
+ADD_SUBDIRECTORY(src/plugin)
+
+IF(DEFINED TIZEN_ENGINEER_MODE)
+	ADD_SUBDIRECTORY(test_clinet_app/ndef-tool)
+	#ADD_SUBDIRECTORY(test_clinet_app/nfc_client)
+	ADD_SUBDIRECTORY(tests)
+ENDIF()

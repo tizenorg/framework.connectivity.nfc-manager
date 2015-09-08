@@ -1,19 +1,18 @@
 /*
-  * Copyright 2012  Samsung Electronics Co., Ltd
-  *
-  * Licensed under the Flora License, Version 1.0 (the "License");
-  * you may not use this file except in compliance with the License.
-  * You may obtain a copy of the License at
-
-  *     http://www.tizenopensource.org/license
-  *
-  * Unless required by applicable law or agreed to in writing, software
-  * distributed under the License is distributed on an "AS IS" BASIS,
-  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  * See the License for the specific language governing permissions and
-  * limitations under the License.
-  */
-
+ * Copyright (c) 2012, 2013 Samsung Electronics Co., Ltd.
+ *
+ * Licensed under the Flora License, Version 1.1 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://floralicense.org/license/
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #ifndef __NET_NFC_NDEF_RECORD_H__
 #define __NET_NFC_NDEF_RECORD_H__
@@ -21,7 +20,7 @@
 #include "net_nfc_typedef.h"
 
 #ifdef __cplusplus
-  extern "C" {
+extern "C" {
 #endif
 
 
@@ -44,7 +43,7 @@
 
 	@exception NONE
 */
-uint8_t net_nfc_get_record_mb (uint8_t flag);
+uint8_t net_nfc_get_record_mb(uint8_t flag);
 /**
 	This define gives you Message end from the flag byte
 
@@ -53,7 +52,7 @@ uint8_t net_nfc_get_record_mb (uint8_t flag);
 
 	@exception NONE
 */
-uint8_t net_nfc_get_record_me (uint8_t flag);
+uint8_t net_nfc_get_record_me(uint8_t flag);
 /**
 	This define gives you Chun Flag  that indicate that either the first record chunk or a middle record chunk of a chunked payload
 
@@ -62,7 +61,7 @@ uint8_t net_nfc_get_record_me (uint8_t flag);
 
 	@exception NONE
 */
-uint8_t net_nfc_get_record_cf (uint8_t flag);
+uint8_t net_nfc_get_record_cf(uint8_t flag);
 /**
 	This define gives you ID length present flag
 
@@ -72,7 +71,7 @@ uint8_t net_nfc_get_record_cf (uint8_t flag);
 	@exception NONE
 
 */
-uint8_t net_nfc_get_record_il (uint8_t flag);
+uint8_t net_nfc_get_record_il(uint8_t flag);
 /**
 	This define gives you short record flag. This flag indicates that the payload length filed is a single octet
 
@@ -81,7 +80,7 @@ uint8_t net_nfc_get_record_il (uint8_t flag);
 
 	@exception NONE
 */
-uint8_t net_nfc_get_record_sr (uint8_t flag);
+uint8_t net_nfc_get_record_sr(uint8_t flag);
 
 
 
@@ -115,7 +114,7 @@ uint8_t net_nfc_get_record_sr (uint8_t flag);
 		}
 	@endcode
 */
-net_nfc_error_e net_nfc_create_record(ndef_record_h* record, net_nfc_record_tnf_e tnf, data_h typeName, data_h id, data_h payload );
+net_nfc_error_e net_nfc_create_record(ndef_record_h *record, net_nfc_record_tnf_e tnf, data_h typeName, data_h id, data_h payload);
 
 
 /**
@@ -151,7 +150,7 @@ net_nfc_error_e net_nfc_create_record(ndef_record_h* record, net_nfc_record_tnf_
 	@endcode
 
 */
-net_nfc_error_e net_nfc_create_text_type_record(ndef_record_h* record, const char* text, const char* language_code_str, net_nfc_encode_type_e encode);
+net_nfc_error_e net_nfc_create_text_type_record(ndef_record_h *record, const char *text, const char *language_code_str, net_nfc_encode_type_e encode);
 
 /**
 	this function helps to create URI type payload
@@ -179,7 +178,7 @@ net_nfc_error_e net_nfc_create_text_type_record(ndef_record_h* record, const cha
 	@endcode
 */
 
-net_nfc_error_e net_nfc_create_uri_type_record(ndef_record_h* record, const char * uri, net_nfc_schema_type_e protocol_schema);
+net_nfc_error_e net_nfc_create_uri_type_record(ndef_record_h *record, const char *uri, net_nfc_schema_type_e protocol_schema);
 
 /**
 	this function is getter of record payload.
@@ -194,7 +193,7 @@ net_nfc_error_e net_nfc_create_uri_type_record(ndef_record_h* record, const char
 	@exception NET_NFC_NULL_PARAMETER		parameter(s) has(have) illigal NULL pointer(s)
 
 */
-net_nfc_error_e net_nfc_get_record_payload (ndef_record_h record, data_h * payload);
+net_nfc_error_e net_nfc_get_record_payload(ndef_record_h record, data_h *payload);
 
 /**
 	this function is getter of record type.
@@ -209,7 +208,7 @@ net_nfc_error_e net_nfc_get_record_payload (ndef_record_h record, data_h * paylo
 	@exception NET_NFC_NULL_PARAMETER		parameter(s) has(have) illigal NULL pointer(s)
 
 */
-net_nfc_error_e net_nfc_get_record_type (ndef_record_h record, data_h * type);
+net_nfc_error_e net_nfc_get_record_type(ndef_record_h record, data_h *type);
 
 /**
 	this function is getter of record ID.
@@ -224,7 +223,7 @@ net_nfc_error_e net_nfc_get_record_type (ndef_record_h record, data_h * type);
 
 	@exception NET_NFC_NULL_PARAMETER		parameter(s) has(have) illigal NULL pointer(s)
 */
-net_nfc_error_e net_nfc_get_record_id (ndef_record_h record, data_h * id);
+net_nfc_error_e net_nfc_get_record_id(ndef_record_h record, data_h *id);
 
 /**
 	this function is getter of record TNF value.
@@ -238,7 +237,7 @@ net_nfc_error_e net_nfc_get_record_id (ndef_record_h record, data_h * id);
 
 
 */
-net_nfc_error_e net_nfc_get_record_tnf(ndef_record_h record, net_nfc_record_tnf_e * tnf);
+net_nfc_error_e net_nfc_get_record_tnf(ndef_record_h record, net_nfc_record_tnf_e *tnf);
 
 /**
 	this function is getter of record flags.
@@ -270,7 +269,7 @@ net_nfc_error_e net_nfc_get_record_tnf(ndef_record_h record, net_nfc_record_tnf_
 	@endcode
 
 */
-net_nfc_error_e net_nfc_get_record_flags (ndef_record_h record, uint8_t * flag);
+net_nfc_error_e net_nfc_get_record_flags(ndef_record_h record, uint8_t *flag);
 
 
 /**
@@ -284,7 +283,7 @@ net_nfc_error_e net_nfc_get_record_flags (ndef_record_h record, uint8_t * flag);
 	@exception NET_NFC_NULL_PARAMETER		parameter(s) has(have) illigal NULL pointer(s)
 
 */
-net_nfc_error_e net_nfc_set_record_id (ndef_record_h record, data_h id);
+net_nfc_error_e net_nfc_set_record_id(ndef_record_h record, data_h id);
 
 /**
 	this function free the record handler. do not use this function after appending the ndef message
@@ -296,7 +295,7 @@ net_nfc_error_e net_nfc_set_record_id (ndef_record_h record, data_h id);
 	@exception NET_NFC_NULL_PARAMETER		parameter(s) has(have) illigal NULL pointer(s)
 
 */
-net_nfc_error_e net_nfc_free_record (ndef_record_h record);
+net_nfc_error_e net_nfc_free_record(ndef_record_h record);
 
 
 /**
@@ -313,7 +312,7 @@ net_nfc_error_e net_nfc_free_record (ndef_record_h record);
 
 */
 
-net_nfc_error_e net_nfc_create_text_string_from_text_record(ndef_record_h record, char** buffer);
+net_nfc_error_e net_nfc_create_text_string_from_text_record(ndef_record_h record, char **buffer);
 
 /**
 	this function get language code from text record. (ex: US-en)
@@ -328,7 +327,7 @@ net_nfc_error_e net_nfc_create_text_string_from_text_record(ndef_record_h record
 
 */
 
-net_nfc_error_e net_nfc_get_languange_code_string_from_text_record (ndef_record_h record, char** lang_code_str);
+net_nfc_error_e net_nfc_get_languange_code_string_from_text_record(ndef_record_h record, char **lang_code_str);
 
 
 /**
@@ -344,7 +343,7 @@ net_nfc_error_e net_nfc_get_languange_code_string_from_text_record (ndef_record_
 
 */
 
-net_nfc_error_e net_nfc_get_encoding_type_from_text_record(ndef_record_h record, net_nfc_encode_type_e * encoding);
+net_nfc_error_e net_nfc_get_encoding_type_from_text_record(ndef_record_h record, net_nfc_encode_type_e *encoding);
 
 
 /**
@@ -360,13 +359,11 @@ net_nfc_error_e net_nfc_get_encoding_type_from_text_record(ndef_record_h record,
 
 */
 
-net_nfc_error_e net_nfc_create_uri_string_from_uri_record(ndef_record_h record, char ** uri);
+net_nfc_error_e net_nfc_create_uri_string_from_uri_record(ndef_record_h record, char **uri);
 
 #ifdef __cplusplus
- }
+}
 #endif
 
 
-#endif
-
-
+#endif //__NET_NFC_NDEF_RECORD_H__

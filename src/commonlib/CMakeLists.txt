@@ -5,6 +5,15 @@ SET(NFC_COMMON_LIB "nfc-common-lib")
 SET(VERSION_MAJOR 1)
 SET(VERSION ${VERSION_MAJOR}.0.0)
 
+FIND_PROGRAM(GDBUS_CODEGEN NAMES gdbus-codegen)
+EXEC_PROGRAM(${GDBUS_CODEGEN} ARGS
+		" \\
+		--generate-c-code ${CMAKE_CURRENT_SOURCE_DIR}/net_nfc_gdbus \\
+		--c-namespace NetNfcGDbus\\
+		--interface-prefix org.tizen.NetNfcService. \\
+		${CMAKE_CURRENT_SOURCE_DIR}/net_nfc.xml \\
+		")
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 AUX_SOURCE_DIRECTORY(${CMAKE_CURRENT_SOURCE_DIR} COMMON_LIB_SRCS)
@@ -14,7 +23,8 @@ IF("${CMAKE_BUILD_TYPE}" STREQUAL "")
 ENDIF("${CMAKE_BUILD_TYPE}" STREQUAL "")
 
 INCLUDE(FindPkgConfig)
-pkg_check_modules(commonlib_pkges REQUIRED glib-2.0 dlog bluetooth-api svi libssl)
+pkg_check_modules(commonlib_pkges REQUIRED
+		glib-2.0 gio-2.0 gio-unix-2.0 dlog bluetooth-api openssl aul pkgmgr-info)
 
 FOREACH(flag ${commonlib_pkges_CFLAGS})
 	SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag}")
@@ -26,7 +36,7 @@ MESSAGE("CHECK MODULE in COMMON_LIB ${commonlib_pkges_LDFLAGS}")
 
 SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} -pipe -fomit-frame-pointer -Wall -Wno-trigraphs -Werror-implicit-function-declaration  -fno-strict-aliasing -Wl,-zdefs")
 
-SET(ARM_CFLAGS "${ARM_CLAGS} -mapcs -mno-sched-prolog -mabi=aapcs-linux -mno-thumb-interwork -msoft-float -Uarm -fno-common -fpic")
+SET(ARM_CFLAGS "${ARM_CLAGS} -mapcs -mno-sched-prolog -mabi=aapcs-linux -Uarm -fno-common -fpic")
 
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror-implicit-function-declaration")
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS}")
@@ -41,11 +51,6 @@ IF("${ARCH}" MATCHES "^arm.*")
 ENDIF()
 
 ADD_DEFINITIONS("-DPREFIX=\"${CMAKE_INSTALL_PREFIX}\"")
-#ADD_DEFINITIONS("-DSLP_DEBUG")
-ADD_DEFINITIONS("-DNFC_DEBUG_USE_DLOG -D_GNU_SOURCE")
-#ADD_DEFINITIONS("-DUSE_UNIX_DOMAIN")
-ADD_DEFINITIONS("-fpie")
-ADD_DEFINITIONS("-DSECURITY_SERVER")
 
 ADD_LIBRARY(${NFC_COMMON_LIB} SHARED ${COMMON_LIB_SRCS})
 SET_TARGET_PROPERTIES(${NFC_COMMON_LIB} PROPERTIES SOVERSION ${VERSION_MAJOR})
@@ -55,9 +60,9 @@ TARGET_LINK_LIBRARIES(${NFC_COMMON_LIB} ${commonlib_pkges_LDFLAGS})
 
 SET(COMMON_LIB_HEADER
 	include/net_nfc_typedef.h
-	include/net_nfc_util_private.h
+	include/net_nfc_util_internal.h
 	include/net_nfc_oem_controller.h
-	include/net_nfc_typedef_private.h
+	include/net_nfc_typedef_internal.h
 	include/net_nfc_util_ndef_message.h
 	include/net_nfc_util_handover.h
 	include/net_nfc_util_ndef_record.h

@@ -1,11 +1,11 @@
 prefix=/usr
 exec_prefix=${prefix}/bin
 libdir=${prefix}/lib
-includedir=${prefix}/include 
+includedir=${prefix}/include
 
 Name: nfc
 Description: NFC
 Version: $version
-Requires: 
+Requires:
 Libs: -lnfc
 Cflags: -I/usr/include/nfc
