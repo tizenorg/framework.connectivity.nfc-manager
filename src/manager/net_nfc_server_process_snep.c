@@ -1979,7 +1979,7 @@ net_nfc_error_e net_nfc_server_snep_default_server_start(
 				SNEP_SAN,
 				SNEP_SAP,
 				_net_nfc_server_default_server_cb_,
-				NULL);
+				(void *)1234);
 }
 
 

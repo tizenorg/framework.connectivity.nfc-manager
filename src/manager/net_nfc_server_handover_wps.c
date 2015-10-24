@@ -415,7 +415,12 @@ static void _wifi_activated_cb(wifi_error_e result, void *user_data)
 	DEBUG_MSG("_wifi_activated_cb");
 
 	if (result == WIFI_ERROR_NONE) {
-		wifi_scan(_wifi_scan_finished_cb, user_data);
+		int ret;
+
+		ret = wifi_scan(_wifi_scan_finished_cb, user_data);
+		if (ret != WIFI_ERROR_NONE) {
+			DEBUG_ERR_MSG("wifi_scan failed, [%d]", ret);
+		}
 	} else {
 		DEBUG_ERR_MSG("wifi_activate failed, [%d]", result);
 

@@ -209,6 +209,11 @@ net_nfc_error_e net_nfc_util_verify_signature_records(ndef_record_s *begin_recor
 
 					/* initialize context of verifying certificate */
 					context = net_nfc_util_openssl_init_verify_certificate();
+					if(context == NULL)
+					{
+						_net_nfc_util_free_mem(buffer);
+						return NET_NFC_ALLOC_FAIL;
+					}
 
 					/* add signer's certificate */
 					net_nfc_util_openssl_add_certificate_of_signer(context, data_info->value, data_info->length);

@@ -47,8 +47,10 @@ static char package_name[1024];
 
 static void __load_package_name()
 {
-	net_nfc_util_get_pkgid_by_pid(getpid(),
-		package_name, sizeof(package_name));
+	if (net_nfc_util_get_pkgid_by_pid(getpid(),
+		package_name, sizeof(package_name)) == false) {
+		DEBUG_ERR_MSG("failed to get package name, pid [%d]", getpid());
+	}
 }
 
 static void hce_event_received(GObject *source_object, guint arg_handle,

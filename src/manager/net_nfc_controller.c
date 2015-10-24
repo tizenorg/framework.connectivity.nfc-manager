@@ -986,11 +986,7 @@ void net_nfc_controller_llcp_received_cb(net_nfc_llcp_socket_t socket,
 	if (param->cb != NULL) {
 		param->cb(param->socket, result, &param->data, data, param->user_param);
 	}
-/*
-	if (param->data.buffer != NULL) {
-		_net_nfc_util_free_mem(param->data.buffer);
-	}
-*/
+
 	_net_nfc_util_free_mem(param);
 }
 
@@ -1383,15 +1379,12 @@ bool net_nfc_controller_secure_element_get_aid_table_size(int *AIDTableSize, net
 	}
 }
 
-bool net_nfc_controller_secure_element_set_route_by_tech
-	(int tech, bool tech_screenOn, bool tech_screenOff, bool tech_screenLock,
-	net_nfc_se_type_e se_type, bool tech_switchOn, bool tech_switchOff, bool tech_batteryOff,
-	net_nfc_error_e *result)
+bool net_nfc_controller_secure_element_set_route_entry
+	(net_nfc_se_entry_type_e type, net_nfc_se_tech_protocol_type_e value, net_nfc_se_type_e route, int power, net_nfc_error_e *result)
 {
-	if (g_interface.set_static_route_by_tech != NULL)
+	if (g_interface.set_routing_entry != NULL)
 	{
-		return g_interface.set_static_route_by_tech(tech, tech_screenOn, tech_screenOff, tech_screenLock,
-			se_type, tech_switchOn, tech_switchOff, tech_batteryOff, result);
+		return g_interface.set_routing_entry(type, value, route, power, result);
 	}
 	else
 	{
@@ -1400,15 +1393,12 @@ bool net_nfc_controller_secure_element_set_route_by_tech
 	}
 }
 
-bool net_nfc_controller_secure_element_set_route_by_proto
-	(int proto, bool proto_screenOn, bool proto_screenOff, bool proto_screenLock,
-	net_nfc_se_type_e se_type, bool proto_switchOn, bool proto_switchOff, bool proto_batteryOff,
-	net_nfc_error_e *result)
+bool net_nfc_controller_secure_element_set_clear_routing_entry
+	(net_nfc_se_entry_type_e type, net_nfc_error_e *result)
 {
-	if (g_interface.set_static_route_by_proto != NULL)
+	if (g_interface.clear_routing_entry != NULL)
 	{
-		return g_interface.set_static_route_by_proto(proto, proto_screenOn, proto_screenOff, proto_screenLock,
-			se_type, proto_switchOn, proto_switchOff, proto_batteryOff, result);
+		return g_interface.clear_routing_entry(type, result);
 	}
 	else
 	{
@@ -1417,29 +1407,15 @@ bool net_nfc_controller_secure_element_set_route_by_proto
 	}
 }
 
-bool net_nfc_controller_secure_element_default_tech_route
-	(net_nfc_se_type_e se_type, int tech_switchon, int tech_switchoff, net_nfc_error_e *result)
+bool net_nfc_controller_set_screen_state(net_nfc_screen_state_type_e screen_state, net_nfc_error_e *result)
 {
-	if (g_interface.set_default_tech_route != NULL)
+	if (g_interface.set_screen_state!= NULL)
 	{
-		return g_interface.set_default_tech_route(se_type, tech_switchon, tech_switchoff, result);
+		return g_interface.set_screen_state(screen_state , result);
 	}
 	else
 	{
-		DEBUG_SERVER_MSG("interface is null");
-		return false;
-	}
-}
-
-bool net_nfc_controller_secure_element_default_proto_route
-	(net_nfc_se_type_e se_type, int proto_switchon, int proto_switchoff, net_nfc_error_e *result)
-{
-	if (g_interface.set_default_proto_route != NULL)
-	{
-		return g_interface.set_default_proto_route(se_type, proto_switchon, proto_switchoff, result);
-	}
-	else
-	{
+		*result = NET_NFC_UNKNOWN_ERROR;
 		DEBUG_SERVER_MSG("interface is null");
 		return false;
 	}

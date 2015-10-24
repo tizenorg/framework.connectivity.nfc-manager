@@ -698,30 +698,29 @@ net_nfc_error_e net_nfc_client_tag_get_current_tag_info_sync(
 			return result;
 		}
 
-		if (result == NET_NFC_PERMISSION_DENIED)
-			return result;
+		if (result == NET_NFC_OK) {
+			if (out_is_connected == true) {
+				if (tag_check_filter(out_dev_type) == true) {
+					tag_get_target_info(out_handle,
+							out_dev_type,
+							out_is_ndef_supported,
+							out_ndef_card_state,
+							out_max_data_size,
+							out_actual_data_size,
+							out_number_of_keys,
+							out_target_info_values,
+							out_raw_data,
+							&client_target_info);
 
-		if (out_is_connected == true) {
-			if (tag_check_filter(out_dev_type) == true) {
-				tag_get_target_info(out_handle,
-						out_dev_type,
-						out_is_ndef_supported,
-						out_ndef_card_state,
-						out_max_data_size,
-						out_actual_data_size,
-						out_number_of_keys,
-						out_target_info_values,
-						out_raw_data,
-						&client_target_info);
+					result = NET_NFC_OK;
+				} else {
+					INFO_MSG("The detected target is filtered out");
 
-				result = NET_NFC_OK;
+					result = NET_NFC_NOT_CONNECTED;
+				}
 			} else {
-				INFO_MSG("The detected target is filtered out");
-
 				result = NET_NFC_NOT_CONNECTED;
 			}
-		} else {
-			result = NET_NFC_NOT_CONNECTED;
 		}
 	} else {
 		result = NET_NFC_OK;
@@ -806,16 +805,15 @@ net_nfc_error_e net_nfc_client_tag_get_current_target_handle_sync(
 			return result;
 		}
 
-		if (result == NET_NFC_PERMISSION_DENIED)
-			return result;
+		if (result == NET_NFC_OK) {
+			if (out_is_connected == true) {
+				if (handle)
+					*handle = GUINT_TO_POINTER(out_handle);
 
-		if (out_is_connected == true) {
-			if (handle)
-				*handle = GUINT_TO_POINTER(out_handle);
-
-			result = NET_NFC_OK;
-		} else {
-			result = NET_NFC_NOT_CONNECTED;
+				result = NET_NFC_OK;
+			} else {
+				result = NET_NFC_NOT_CONNECTED;
+			}
 		}
 	} else if (info->devType == NET_NFC_NFCIP1_INITIATOR ||
 		info->devType == NET_NFC_NFCIP1_TARGET) {

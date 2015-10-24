@@ -97,23 +97,16 @@ typedef bool (*net_nfc_oem_controller_secure_element_clear_aid_table)(net_nfc_er
 typedef bool (*net_nfc_oem_controller_secure_element_get_aid_tablesize)(int *AIDTableSize,
 	net_nfc_error_e *result);
 
-typedef bool (*net_nfc_oem_controller_secure_element_set_route_by_tech)(int tech,
-	bool tech_screenOn, bool tech_screenOff, bool tech_screenLock,
-	net_nfc_se_type_e se_type, bool tech_switchOn, bool tech_switchOff, bool tech_batteryOff,
-	net_nfc_error_e *result);
+typedef bool (*net_nfc_oem_controller_secure_element_set_route_entry)
+	(net_nfc_se_entry_type_e type, net_nfc_se_tech_protocol_type_e value,
+	net_nfc_se_type_e route, int power, net_nfc_error_e *result);
 
-typedef bool (*net_nfc_oem_controller_secure_element_set_route_by_proto)(int proto,
-	bool proto_screenOn, bool proto_screenOff, bool proto_screenLock,
-	net_nfc_se_type_e se_type, bool proto_switchOn, bool proto_switchOff, bool proto_batteryOff,
-	net_nfc_error_e *result);
+typedef bool (*net_nfc_oem_controller_secure_element_clear_routing_entry)
+	(net_nfc_se_entry_type_e type, net_nfc_error_e *result);
 
-typedef bool (*net_nfc_oem_controller_secure_element_set_default_tech_route)(net_nfc_se_type_e se_type,
-	int tech_switchon, int tech_switchoff,
-	net_nfc_error_e *result);
+typedef bool (*net_nfc_oem_controller_set_screen_state)
+	(net_nfc_screen_state_type_e screen_state, net_nfc_error_e *result);
 
-typedef bool (*net_nfc_oem_controller_secure_element_set_default_proto_route)(net_nfc_se_type_e se_type,
-	int proto_switchon, int proto_switchoff,
-	net_nfc_error_e *result);
 
 
 typedef struct _net_nfc_oem_interface_s
@@ -184,10 +177,10 @@ typedef struct _net_nfc_oem_interface_s
 	net_nfc_oem_controller_secure_element_clear_aid_table clear_aid_table;
 	net_nfc_oem_controller_secure_element_get_aid_tablesize get_aid_tablesize;
 
-	net_nfc_oem_controller_secure_element_set_route_by_tech set_static_route_by_tech;
-	net_nfc_oem_controller_secure_element_set_route_by_proto set_static_route_by_proto;
-	net_nfc_oem_controller_secure_element_set_default_tech_route set_default_tech_route;
-	net_nfc_oem_controller_secure_element_set_default_proto_route set_default_proto_route;
+
+	net_nfc_oem_controller_secure_element_set_route_entry set_routing_entry;
+	net_nfc_oem_controller_secure_element_clear_routing_entry clear_routing_entry;
+	net_nfc_oem_controller_set_screen_state set_screen_state;
 } net_nfc_oem_interface_s;
 
 #endif //__NET_NFC_OEM_CONTROLLER_H__

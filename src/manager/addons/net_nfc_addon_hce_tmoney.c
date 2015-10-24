@@ -25,81 +25,24 @@
 #include "net_nfc_addon_hce.h"
 
 
-#define PPSE_INS_LOOPBACK		0xEE
-
 #define ENDIAN_16(x)			((((x) >> 8) & 0x00FF) | (((x) << 8) & 0xFF00))
 
-#define PPSE_AID			"325041592E5359532E4444463031" /* 00A404000E325041592E5359532E4444463031 */
+#define T_MONEY_AID			"D4100000030001" /*  00A4040007D410000003000100 */
+#define T_MONEY_INS_READ		(uint8_t)0xCA
 
-/* "2PAY.SYS.DDF01" */
-static uint8_t ppse_aid[] = { '2', 'P', 'A', 'Y', '.', 'S', 'Y', 'S', '.', 'D', 'D', 'F', '0', '1' };
+static const uint8_t tmoney_aid[] = { 0xD4, 0x10, 0x00, 0x00, 0x03, 0x00, 0x01 };
+static uint8_t tmoney_response[] = {
+	0x6F, 0x00,
+//	0x6F, 0x31,
+//	0xB0, 0x2F,
+//	0x00, 0x10, 0x01, 0x08, 0x10, 0x10, 0x00, 0x09, 0x84, 0x60, 0x82, 0x99, 0x01, 0x06, 0x70, 0x79,
+//	0x48, 0x20, 0x13, 0x03, 0x30, 0x20, 0x18, 0x03, 0x29, 0x01, 0x00, 0x00, 0x07, 0xA1, 0x20, 0x40,
+//	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+static uint8_t tmoney_uid[] = { 'T', 'i', 'z', 'e', 'n', '1', '2', '3' };
 
 static bool selected;
-
-static size_t __put_tlv(uint8_t *out, size_t len,
-	uint16_t t, uint16_t l, uint8_t *v)
-{
-	size_t offset = 0;
-
-	/* t */
-	if (t & 0xFF00) {
-		out[offset++] = (t & 0xFF00) >> 8;
-		out[offset++] = t & 0x00FF;
-	} else {
-		out[offset++] = t & 0x00FF;
-	}
-
-	/* l */
-	if (l & 0xFF00) {
-		out[offset++] = (l & 0xFF00) >> 8;
-		out[offset++] = l & 0x00FF;
-	} else {
-		out[offset++] = l & 0x00FF;
-	}
-
-	/* v */
-	memcpy(out + offset, v, l);
-	offset += l;
-
-	return offset;
-}
-
-static size_t __fill_fci(uint8_t *tlv, size_t len, data_s *aid, data_s *label,
-	uint8_t priority)
-{
-	uint8_t result[1024] = { 0, };
-	uint8_t temp[1024] = { 0, };
-	size_t offset = 0, temp_len;
-
-	/* aid */
-	offset = __put_tlv(temp, sizeof(temp), 0x4F, aid->length, aid->buffer);
-
-	/* label */
-	offset += __put_tlv(temp + offset, sizeof(temp) - offset, 0x50,
-		label->length, label->buffer);
-
-	/* priority */
-	offset += __put_tlv(temp + offset, sizeof(temp) - offset, 0x82,
-		sizeof(priority), &priority);
-
-
-	/* FCI issuer descretionary data */
-	temp_len = __put_tlv(result, sizeof(result), 0xBF0C, offset, temp);
-
-	/* DF name */
-	offset = __put_tlv(temp, sizeof(temp), 0x84, sizeof(ppse_aid), ppse_aid);
-
-	/* FCI proprietary template */
-	offset += __put_tlv(temp + offset, sizeof(result) - offset, 0xA5,
-		temp_len, result);
-
-
-	offset = __put_tlv(result, sizeof(result), 0x6F, offset, temp);
-
-	memcpy(tlv, result, offset);
-
-	return offset;
-}
+static bool enabled;
 
 static void __send_response(net_nfc_target_handle_s *handle, uint16_t sw, uint8_t *resp, size_t len)
 {
@@ -156,61 +99,40 @@ static void __process_command(net_nfc_target_handle_s *handle, data_s *cmd)
 			goto END;
 		}
 
-		if (memcmp(apdu->data, ppse_aid, MIN(sizeof(ppse_aid), apdu->lc)) == 0) {
-			uint8_t buffer[1024];
-			size_t len;
-			uint8_t temp_aid[] = { 0x12, 0x34, 0x56, 0x78, 0x90 };
-			data_s aid = { temp_aid, sizeof(temp_aid) };
-			uint8_t temp_label[] = { 'T', 'E', 'S', 'T' };
-			data_s label = { temp_label, sizeof(temp_label) };
-
-			DEBUG_SERVER_MSG("select ppse applet");
-
-			len = __fill_fci(buffer, sizeof(buffer), &aid, &label, 1);
+		if (memcmp(apdu->data, tmoney_aid, MIN(sizeof(tmoney_aid), apdu->lc)) == 0) {
+			DEBUG_SERVER_MSG("select tmoney applet");
 
 			selected = true;
 
-			__send_response(handle, NET_NFC_HCE_SW_SUCCESS, buffer, len);
+			__send_response(handle, NET_NFC_HCE_SW_SUCCESS, tmoney_response, sizeof(tmoney_response));
 		} else {
 			DEBUG_ERR_MSG("application not found");
 			__send_response(handle, NET_NFC_HCE_SW_FILE_NOT_FOUND, NULL, 0);
 		}
-	} else if (apdu->ins == PPSE_INS_LOOPBACK) {
+	} else if (apdu->ins == T_MONEY_INS_READ) {
 		if (selected == false) {
 			DEBUG_ERR_MSG("need to select applet");
 			__send_response(handle, NET_NFC_HCE_SW_COMMAND_NOT_ALLOWED, NULL, 0);
 			goto END;
 		}
 
-		if (apdu->cla == 0x80) {
-			DEBUG_ERR_MSG("wrong cla, cla [%02X]", apdu->cla);
-			__send_response(handle, NET_NFC_HCE_SW_CLASS_NOT_SUPPORTED, NULL, 0);
-			goto END;
-		}
-
-		if (apdu->p1 != 0 || apdu->p2 != 0) {
+		if (apdu->p1 != 1 || apdu->p2 != 1) {
 			DEBUG_ERR_MSG("incorrect parameter, p1 [%02X], p2 [%02X]", apdu->p1, apdu->p2);
 			__send_response(handle, NET_NFC_HCE_SW_INCORRECT_P1_TO_P2, NULL, 0);
 			goto END;
 		}
 
-		if (apdu->lc == NET_NFC_HCE_INVALID_VALUE ||
-			apdu->lc == 0 || apdu->data == NULL ||
-			apdu->le == NET_NFC_HCE_INVALID_VALUE) {
+		if (apdu->le == NET_NFC_HCE_INVALID_VALUE) {
 			DEBUG_ERR_MSG("wrong parameter, lc [%d], data [%p], le [%d]", apdu->lc, apdu->data, apdu->le);
 			__send_response(handle, NET_NFC_HCE_SW_LC_INCONSIST_P1_TO_P2, NULL, 0);
 			goto END;
 		}
 
-		DEBUG_SERVER_MSG("ppse loopback");
-
-		if (apdu->le == 0) {
-			apdu->le = 255;
-		}
+		DEBUG_SERVER_MSG("tmoney read");
 
 		__send_response(handle, NET_NFC_HCE_SW_SUCCESS,
-			apdu->data,
-			MIN(apdu->lc, apdu->le));
+			tmoney_uid,
+			sizeof(tmoney_uid));
 	} else {
 		DEBUG_ERR_MSG("not supported");
 		__send_response(handle, NET_NFC_HCE_SW_INS_NOT_SUPPORTED, NULL, 0);
@@ -222,7 +144,7 @@ END :
 	}
 }
 
-static void __nfc_addon_hce_ppse_listener(net_nfc_target_handle_s *handle,
+static void __nfc_addon_hce_tmoney_listener(net_nfc_target_handle_s *handle,
 	int event, data_s *data, void *user_data)
 {
 	switch (event) {
@@ -246,56 +168,70 @@ static void __nfc_addon_hce_ppse_listener(net_nfc_target_handle_s *handle,
 	}
 }
 
-static void _nfc_plugin_hce_ppse_init(void)
+static void _plugin_hce_tmoney_enable(void)
 {
-	DEBUG_ADDON_MSG(">>>>");
+	net_nfc_error_e result = NET_NFC_OK;
 
-	if (net_nfc_server_route_table_find_aid("nfc-manager",
-		PPSE_AID) == NULL) {
-		net_nfc_error_e result;
+	if (enabled == false) {
+		if (net_nfc_server_route_table_find_aid("nfc-manager",
+			T_MONEY_AID) == NULL) {
+			result = net_nfc_server_route_table_add_aid(NULL, "nfc-manager",
+				NET_NFC_SE_TYPE_HCE,
+				NET_NFC_CARD_EMULATION_CATEGORY_OTHER,
+				T_MONEY_AID);
+		}
 
-		result = net_nfc_server_route_table_add_aid(NULL, "nfc-manager",
-			NET_NFC_SE_TYPE_HCE,
-			NET_NFC_CARD_EMULATION_CATEGORY_OTHER,
-			PPSE_AID);
-		if (result != NET_NFC_OK) {
+		if (result == NET_NFC_OK) {
+			enabled = true;
+		} else {
 			DEBUG_ERR_MSG("net_nfc_server_route_table_add_aid failed, [%d]", result);
 		}
 	}
 }
 
-static void _nfc_plugin_hce_ppse_pause(void)
+static void _plugin_hce_tmoney_disable(void)
 {
-	DEBUG_ADDON_MSG(">>>>");
-}
-
-static void _nfc_plugin_hce_ppse_resume(void)
-{
-	DEBUG_ADDON_MSG(">>>>");
-}
-
-static void _nfc_plugin_hce_ppse_deinit(void)
-{
-	DEBUG_ADDON_MSG(">>>>");
-
-	if (net_nfc_server_route_table_find_aid("nfc-manager",
-		PPSE_AID) == NULL) {
-		net_nfc_error_e result;
-
-		result = net_nfc_server_route_table_del_aid(NULL, "nfc-manager", PPSE_AID, false);
-		if (result != NET_NFC_OK) {
-			DEBUG_ERR_MSG("net_nfc_server_route_table_del_aid failed, [%d]", result);
+	if (enabled == true) {
+		if (net_nfc_server_route_table_find_aid("nfc-manager",
+			T_MONEY_AID) != NULL) {
+			net_nfc_server_route_table_del_aid(NULL, "nfc-manager",
+				T_MONEY_AID, false);
 		}
+
+		enabled = false;
 	}
 }
+static void _nfc_plugin_hce_tmoney_init(void)
+{
+	DEBUG_ADDON_MSG(">>>>");
 
-net_nfc_addon_hce_ops_t net_nfc_addon_hce_ppse_ops = {
-	.name = "HCE PPSE EMUL",
-	.init = _nfc_plugin_hce_ppse_init,
-	.pause = _nfc_plugin_hce_ppse_pause,
-	.resume = _nfc_plugin_hce_ppse_resume,
-	.deinit = _nfc_plugin_hce_ppse_deinit,
+	_plugin_hce_tmoney_enable();
+}
 
-	.aid = PPSE_AID,
-	.listener = __nfc_addon_hce_ppse_listener,
+static void _nfc_plugin_hce_tmoney_pause(void)
+{
+	DEBUG_ADDON_MSG(">>>>");
+}
+
+static void _nfc_plugin_hce_tmoney_resume(void)
+{
+	DEBUG_ADDON_MSG(">>>>");
+}
+
+static void _nfc_plugin_hce_tmoney_deinit(void)
+{
+	DEBUG_ADDON_MSG(">>>>");
+
+	_plugin_hce_tmoney_disable();
+}
+
+net_nfc_addon_hce_ops_t net_nfc_addon_hce_tmoney_ops = {
+	.name = "HCE T-MONEY EMUL",
+	.init = _nfc_plugin_hce_tmoney_init,
+	.pause = _nfc_plugin_hce_tmoney_pause,
+	.resume = _nfc_plugin_hce_tmoney_resume,
+	.deinit = _nfc_plugin_hce_tmoney_deinit,
+
+	.aid = T_MONEY_AID,
+	.listener = __nfc_addon_hce_tmoney_listener,
 };

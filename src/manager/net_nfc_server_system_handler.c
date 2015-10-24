@@ -56,8 +56,6 @@ static gboolean popup_handle_set(NetNfcGDbusPopup *popup_manager,
 		result = NET_NFC_PERMISSION_DENIED;
 
 		goto ERROR;
-
-		return FALSE;
 	}
 
 	net_nfc_server_gdbus_set_launch_state(

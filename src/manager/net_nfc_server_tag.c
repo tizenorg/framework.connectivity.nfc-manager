@@ -322,6 +322,9 @@ static data_s *_get_barcode_from_target_info(net_nfc_current_target_info_s *targ
 		i++;
 	}
 
+	if(str != NULL)
+		g_free(str);
+
 	return data;
 }
 

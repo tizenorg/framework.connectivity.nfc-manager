@@ -32,6 +32,8 @@
 #include "net_nfc_server_context_internal.h"
 
 
+static GList *client_detached_cbs;
+
 static GHashTable *client_contexts;
 static pthread_mutex_t context_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -43,11 +45,26 @@ static void _cleanup_client_key(gpointer data)
 	}
 }
 
+static void _on_client_detached(gpointer data, gpointer user_data)
+{
+	net_nfc_server_gdbus_on_client_detached_cb cb = data;
+
+	DEBUG_MSG("invoke releasing callbacks");
+
+	if (cb != NULL) {
+		cb((net_nfc_client_context_info_t *)user_data);
+	}
+}
+
 static void _cleanup_client_context(gpointer data)
 {
-	if (data != NULL)
-	{
-		g_free(data);
+	net_nfc_client_context_info_t *info = data;
+
+	if (info != NULL) {
+		g_list_foreach(client_detached_cbs, _on_client_detached, info);
+
+		g_free(info->id);
+		g_free(info);
 	}
 }
 
@@ -73,6 +90,18 @@ void net_nfc_server_gdbus_deinit_client_context()
 	}
 
 	pthread_mutex_unlock(&context_lock);
+}
+
+void net_nfc_server_gdbus_register_on_client_detached_cb(
+	net_nfc_server_gdbus_on_client_detached_cb cb)
+{
+	client_detached_cbs = g_list_append(client_detached_cbs, cb);
+}
+
+void net_nfc_server_gdbus_unregister_on_client_detached_cb(
+	net_nfc_server_gdbus_on_client_detached_cb cb)
+{
+	client_detached_cbs = g_list_remove(client_detached_cbs, cb);
 }
 
 /* TODO */
@@ -175,6 +204,7 @@ void net_nfc_server_gdbus_add_client_context(const char *id,
 			pid = net_nfc_server_gdbus_get_pid(id);
 			DEBUG_SERVER_MSG("added client id : [%s], pid [%d]", id, pid);
 
+			info->id = g_strdup(id);
 			info->pid = pid;
 			info->pgid = getpgid(pid);
 			info->state = state;

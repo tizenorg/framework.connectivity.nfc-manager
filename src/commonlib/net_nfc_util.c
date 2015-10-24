@@ -301,6 +301,126 @@ NET_NFC_EXPORT_API void net_nfc_util_free_data(data_s *data)
 	_net_nfc_util_free_mem(data);
 }
 
+net_nfc_conn_handover_carrier_state_e net_nfc_util_get_cps(net_nfc_conn_handover_carrier_type_e carrier_type)
+{
+	net_nfc_conn_handover_carrier_state_e cps = NET_NFC_CONN_HANDOVER_CARRIER_INACTIVATE;
+
+	if (carrier_type == NET_NFC_CONN_HANDOVER_CARRIER_BT)
+	{
+		int ret = bluetooth_check_adapter();
+
+		switch (ret)
+		{
+		case BLUETOOTH_ADAPTER_ENABLED :
+			cps = NET_NFC_CONN_HANDOVER_CARRIER_ACTIVATE;
+			break;
+
+		case BLUETOOTH_ADAPTER_CHANGING_ENABLE :
+			cps = NET_NFC_CONN_HANDOVER_CARRIER_ACTIVATING;
+			break;
+
+		case BLUETOOTH_ADAPTER_DISABLED :
+		case BLUETOOTH_ADAPTER_CHANGING_DISABLE :
+		case BLUETOOTH_ERROR_NO_RESOURCES :
+		default :
+			cps = NET_NFC_CONN_HANDOVER_CARRIER_INACTIVATE;
+			break;
+		}
+	}
+	else if (carrier_type == NET_NFC_CONN_HANDOVER_CARRIER_WIFI_BSS)
+	{
+		int wifi_state = 0;
+
+		vconf_get_int(VCONFKEY_WIFI_STATE, &wifi_state);
+
+		switch (wifi_state)
+		{
+		case VCONFKEY_WIFI_UNCONNECTED :
+		case VCONFKEY_WIFI_CONNECTED :
+		case VCONFKEY_WIFI_TRANSFER :
+			cps = NET_NFC_CONN_HANDOVER_CARRIER_ACTIVATE;
+			break;
+
+		case VCONFKEY_WIFI_OFF :
+		default :
+			cps = NET_NFC_CONN_HANDOVER_CARRIER_INACTIVATE;
+			break;
+		}
+	}
+
+	return cps;
+}
+
+#define BLUETOOTH_ADDRESS_LENGTH	6
+#define HIDDEN_BT_ADDR_FILE		"/opt/etc/.bd_addr"
+
+uint8_t *net_nfc_util_get_local_bt_address()
+{
+	if (bt_addr != NULL)
+	{
+		return bt_addr;
+	}
+
+	_net_nfc_util_alloc_mem(bt_addr, BLUETOOTH_ADDRESS_LENGTH);
+	if (bt_addr != NULL)
+	{
+		if (net_nfc_util_get_cps(NET_NFC_CONN_HANDOVER_CARRIER_BT) != NET_NFC_CONN_HANDOVER_CARRIER_ACTIVATE)
+		{
+			// bt power is off. so get bt address from configuration file.
+			FILE *fp = NULL;
+
+			if ((fp = fopen(HIDDEN_BT_ADDR_FILE, "r")) != NULL)
+			{
+				unsigned char temp[BLUETOOTH_ADDRESS_LENGTH * 2] = { 0, };
+
+				int ch;
+				int count = 0;
+				int i = 0;
+
+				while ((ch = fgetc(fp)) != EOF && count < BLUETOOTH_ADDRESS_LENGTH * 2)
+				{
+					if (((ch >= '0') && (ch <= '9')))
+					{
+						temp[count++] = ch - '0';
+					}
+					else if (((ch >= 'a') && (ch <= 'z')))
+					{
+						temp[count++] = ch - 'a' + 10;
+					}
+					else if (((ch >= 'A') && (ch <= 'Z')))
+					{
+						temp[count++] = ch - 'A' + 10;
+					}
+				}
+
+				for (; i < BLUETOOTH_ADDRESS_LENGTH; i++)
+				{
+					bt_addr[i] = temp[i * 2] << 4 | temp[i * 2 + 1];
+				}
+
+				fclose(fp);
+			}
+		}
+		else
+		{
+			bluetooth_device_address_t local_address;
+
+			memset(&local_address, 0x00, sizeof(bluetooth_device_address_t));
+
+			bluetooth_get_local_address(&local_address);
+
+			memcpy(bt_addr, &local_address.addr, BLUETOOTH_ADDRESS_LENGTH);
+		}
+	}
+
+	return bt_addr;
+}
+
+void net_nfc_util_enable_bluetooth(void)
+{
+	bluetooth_enable_adapter();
+}
+
 bool net_nfc_util_strip_string(char *buffer, int buffer_length)
 {
 	bool result = false;

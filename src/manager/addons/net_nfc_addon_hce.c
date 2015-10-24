@@ -30,6 +30,9 @@ extern net_nfc_addon_hce_ops_t net_nfc_addon_hce_ndef_ops;
 #ifdef ADDON_HCE_PPSE
 extern net_nfc_addon_hce_ops_t net_nfc_addon_hce_ppse_ops;
 #endif
+#ifdef ADDON_HCE_TMONEY
+extern net_nfc_addon_hce_ops_t net_nfc_addon_hce_tmoney_ops;
+#endif
 
 net_nfc_addon_hce_ops_t *hce_addons[] = {
 #ifdef ADDON_HCE_NDEF
@@ -38,9 +41,13 @@ net_nfc_addon_hce_ops_t *hce_addons[] = {
 #ifdef ADDON_HCE_PPSE
 	&net_nfc_addon_hce_ppse_ops,
 #endif
+#ifdef ADDON_HCE_TMONEY
+	&net_nfc_addon_hce_tmoney_ops,
+#endif
+	NULL,
 };
 
-size_t hce_addons_count = sizeof(hce_addons) / sizeof(net_nfc_addon_hce_ops_t *);
+size_t hce_addons_count = (sizeof(hce_addons) / sizeof(net_nfc_addon_hce_ops_t *)) - 1;
 
 static net_nfc_addon_hce_ops_t *selected_ops;
 
@@ -59,7 +66,6 @@ static void __process_command(net_nfc_target_handle_s *handle, data_s *data)
 				data_s temp = { apdu_data->data, apdu_data->lc };
 
 				net_nfc_util_binary_to_hex_string(&temp, aid, sizeof(aid));
-
 
 				for (i = 0; i < hce_addons_count; i++) {
 					if (g_ascii_strcasecmp(hce_addons[i]->aid, aid) == 0) {
@@ -120,7 +126,7 @@ static void _nfc_addon_hce_init(void)
 	net_nfc_server_route_table_init();
 
 	net_nfc_server_hce_start_hce_handler("nfc-manager", NULL,
-		__hce_listener, NULL);
+		__hce_listener, NULL, NULL);
 
 	for (i = 0; i < hce_addons_count; i++) {
 		hce_addons[i]->init();

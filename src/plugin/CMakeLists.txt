@@ -1,6 +1,6 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
 
-SET (this_target hce_plugin)
+SET (this_target cardemulation_plugin)
 
 SET(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/cmake_build_tmp/output)
 include_directories(${CMAKE_SOURCE_DIR}/src/commonlib/include)
@@ -22,11 +22,11 @@ FOREACH(flag ${pkgs_CFLAGS})
 ENDFOREACH(flag)
 
 SET (${this_target}_SOURCE_FILES
-    pkgmgr_plugin_hce.c
+    pkgmgr_plugin_cardemulation.c
     )
 
 ADD_DEFINITIONS("-DDLOG_ERROR_ENABLED")
-ADD_DEFINITIONS("-DLOG_TAG=\"HCE_PLUGIN\"")
+ADD_DEFINITIONS("-DLOG_TAG=\"CARDEMULATION_PLUGIN\"")
 SET(EXTRA_CFLAGS  "${EXTRA_CFLAGS} -Wall" )
 
 SET(CMAKE_C_FLAGS_PROFILING    " -g -pg")

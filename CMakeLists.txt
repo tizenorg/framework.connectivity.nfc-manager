@@ -15,7 +15,6 @@ ADD_SUBDIRECTORY(src/manager)
 ADD_SUBDIRECTORY(src/plugin)
 
 IF(DEFINED TIZEN_ENGINEER_MODE)
-	ADD_SUBDIRECTORY(test_clinet_app/ndef-tool)
 	#ADD_SUBDIRECTORY(test_clinet_app/nfc_client)
 	ADD_SUBDIRECTORY(tests)
 ENDIF()

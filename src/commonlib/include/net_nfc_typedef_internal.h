@@ -454,4 +454,12 @@ typedef struct _net_nfc_llcp_param_t
 }
 net_nfc_llcp_param_t;
 
+typedef enum
+{
+	NET_NFC_INVALID = 0x00,
+	NET_NFC_SCREEN_OFF = 0x01,
+	NET_NFC_SCREEN_ON_LOCK = 0x02,
+	NET_NFC_SCREEN_ON_UNLOCK = 0x03,
+} net_nfc_screen_state_type_e;
+
 #endif //__NET_NFC_TYPEDEF_INTERNAL_H__

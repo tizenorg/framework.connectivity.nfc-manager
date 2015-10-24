@@ -175,7 +175,9 @@ net_nfc_error_e net_nfc_get_tag_info_keys(net_nfc_target_info_h target_info,
 		return NET_NFC_OK;
 	}
 
-	_net_nfc_util_alloc_mem(*keys, handle->number_of_keys * sizeof(char **));
+	i = handle->number_of_keys * sizeof(char *);
+
+	_net_nfc_util_alloc_mem(*keys, i);
 	if (*keys == NULL)
 		return NET_NFC_ALLOC_FAIL;
 

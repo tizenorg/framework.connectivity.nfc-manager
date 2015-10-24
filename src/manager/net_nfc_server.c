@@ -75,9 +75,6 @@ static void _name_owner_changed(GDBusProxy *proxy,
 
 	if (strlen(new_owner) == 0) {
 		if (net_nfc_server_gdbus_check_client_is_running(old_owner)) {
-			/* unregister service */
-			net_nfc_server_llcp_unregister_services(old_owner);
-
 			/* remove client context */
 			net_nfc_server_gdbus_cleanup_client_context(old_owner);
 		}

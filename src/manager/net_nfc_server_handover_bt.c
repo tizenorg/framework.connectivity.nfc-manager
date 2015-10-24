@@ -15,6 +15,8 @@
  */
 
 #include <bluetooth.h>
+#include <bluetooth_internal.h>
+
 #ifdef USE_SYSTEM_INFO
 #include "system_info.h"
 #endif
@@ -258,12 +260,6 @@ static net_nfc_error_e _bt_create_config_record(ndef_record_s **record)
 	}
 
 	NET_NFC_REVERSE_ORDER_6_BYTES(bt_addr);
-
-	if(bt_addr == NULL)
-	{
-		result = NET_NFC_OPERATION_FAIL;
-		goto END;
-	}
 
 	result = net_nfc_util_add_carrier_config_property(
 		config, NET_NFC_BT_ATTRIBUTE_ADDRESS,

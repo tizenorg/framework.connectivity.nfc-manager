@@ -1,6 +1,6 @@
 Name:       nfc-manager
 Summary:    NFC framework manager
-Version:    0.1.92
+Version:    0.1.103
 Release:    0
 Group:      libs
 License:    Flora-1.1
@@ -34,10 +34,9 @@ BuildRequires: pkgconfig(sqlite3)
 BuildRequires: pkgconfig(pkgmgr-info)
 BuildRequires: pkgconfig(libxml-2.0)
 BuildRequires: pkgconfig(libcurl)
+BuildRequires: pkgconfig(libprivilege-control)
 BuildRequires: python
 BuildRequires: python-xml
-Requires(post):   /sbin/ldconfig
-Requires(post):   /usr/bin/vconftool
 Requires(postun): /sbin/ldconfig
 
 
@@ -128,16 +127,21 @@ install -D -m 0644 LICENSE.Flora  %{buildroot}/%{_datadir}/license/nfc-client-li
 %post
 /sbin/ldconfig
 
-mkdir -p /opt/usr/share/nfc_debug
-chown :5000 /opt/usr/share/nfc_debug
-chmod 775 /opt/usr/share/nfc_debug
+mkdir -p -m 700 /opt/usr/data/nfc-manager-daemon
+/usr/bin/chsmack -a nfc-manager /opt/usr/data/nfc-manager-daemon
+chown system:system /opt/usr/data/nfc-manager-daemon
 
-mkdir -p /opt/usr/share/nfc-manager-daemon
-chown :5000 /opt/usr/share/nfc-manager-daemon
-chmod 775 /opt/usr/share/nfc-manager-daemon
+mkdir -p -m 744 /opt/usr/share/nfc_debug
+/usr/bin/chsmack -a nfc-manager /opt/usr/share/nfc_debug
+chown system:system /opt/usr/share/nfc_debug
 
-mkdir -p -m 755 /opt/usr/share/nfc-manager-daemon/message
-chown :5000 /opt/usr/share/nfc-manager-daemon/message
+mkdir -p -m 744 /opt/usr/share/nfc-manager-daemon
+/usr/bin/chsmack -a nfc-manager /opt/usr/share/nfc-manager-daemon
+chown system:system /opt/usr/share/nfc-manager-daemon
+
+mkdir -p -m 744 /opt/usr/share/nfc-manager-daemon/message
+/usr/bin/chsmack -a nfc-manager /opt/usr/share/nfc-manager-daemon/message
+chown system:system /opt/usr/share/nfc-manager-daemon/message
 
 systemctl daemon-reload
 if [ $1 == 1 ]; then
@@ -146,16 +150,8 @@ fi
 
 
 %post -n nfc-client-lib
-/sbin/ldconfig
-vconftool set -t bool db/nfc/feature 0 -u 5000 -f -s system::vconf_network
-vconftool set -t bool db/nfc/predefined_item_state 0 -u 5000 -f -s nfc-manager
-vconftool set -t string db/nfc/predefined_item "None" -u 5000 -f -s nfc-manager
 
-vconftool set -t bool db/nfc/enable 1 -u 5000 -f -s system::vconf_network
-vconftool set -t int db/nfc/se_type 3 -u 5000 -f -s nfc-manager
-vconftool set -t int db/nfc/wallet_mode 3 -u 5000 -f -s nfc-manager::admin
-vconftool set -t bool db/nfc/state_by_flight 0 -u 5000 -f -s system::vconf_network
-
+/usr/sbin/setcap cap_mac_override+ep /usr/bin/nfc-manager-daemon
 
 %postun
 /sbin/ldconfig
@@ -176,11 +172,10 @@ systemctl daemon-reload
 %manifest %{name}.manifest
 %defattr(-,root,root,-)
 %{_bindir}/nfc-manager-daemon
-%{_bindir}/ndef-tool
 #%{_bindir}/nfc_client
 %{_libdir}/systemd/system/%{name}.service
 %{_libdir}/systemd/system/multi-user.target.wants/%{name}.service
-%{_datadir}/dbus-1/services/org.tizen.NetNfcService.service
+%{_datadir}/dbus-1/system-services/org.tizen.NetNfcService.service
 %{_datadir}/license/%{name}
 
 
@@ -204,7 +199,7 @@ systemctl daemon-reload
 %defattr(-,root,root,-)
 %{_libdir}/libnfc-common-lib.so
 %{_libdir}/libnfc-common-lib.so.*
-/usr/etc/package-manager/parserlib/metadata/libhce_plugin.so
+/usr/etc/package-manager/parserlib/metadata/libcardemulation_plugin.so
 %{_datadir}/license/nfc-common-lib
 %{_datadir}/nfc-manager-daemon/sounds/Operation_sdk.wav
 

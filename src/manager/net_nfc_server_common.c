@@ -447,11 +447,6 @@ static void restart_polling_loop_thread_func(gpointer user_data)
 	if (vconf_get_int(VCONFKEY_PM_STATE, &pm_state) != 0)
 		DEBUG_ERR_MSG("%s does not exist", "VCONFKEY_PM_STATE");
 
-#if 0
-	if (vconf_get_bool(VCONFKEY_PWLOCK_FIRST_BOOT, &setup_wizard) != 0)
-		DEBUG_ERR_MSG("%s does not exist", "VCONFKEY_PWLOCK_FIRST_BOOT");
-#endif
-
 	DEBUG_SERVER_MSG("lock_screen_set:%d ,pm_state:%d,lock_state:%d",
 		lock_screen_set , pm_state , lock_state);
 

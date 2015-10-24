@@ -141,7 +141,14 @@ static void _wifi_tlv_cb(uint16_t t, uint16_t l,
 		DEBUG_MSG("t [0x%04X] l [%d] v [%p]", t, l, v);
 
 		elem->data = g_malloc0(l);
-		memcpy(elem->data, v, l);
+		if(elem->data != NULL)
+		{
+			memcpy(elem->data, v, l);
+		}
+		else
+		{
+			DEBUG_MSG("elem->data is NULL");
+		}
 	}
 }
 

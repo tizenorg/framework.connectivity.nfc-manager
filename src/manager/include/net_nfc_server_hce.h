@@ -26,10 +26,13 @@
 typedef void (*net_nfc_server_hce_listener_cb)(net_nfc_target_handle_s *handle,
 	int event, data_s *data, void *user_data);
 
+typedef void (*net_nfc_server_hce_user_data_destroy_cb)(void *user_data);
+
 
 /******************************************************************************/
 net_nfc_error_e net_nfc_server_hce_start_hce_handler(const char *package,
-	const char *id, net_nfc_server_hce_listener_cb listener, void *user_data);
+	const char *id, net_nfc_server_hce_listener_cb listener,
+	net_nfc_server_hce_user_data_destroy_cb destroy_cb, void *user_data);
 
 net_nfc_error_e net_nfc_server_hce_stop_hce_handler(const char *package);
 

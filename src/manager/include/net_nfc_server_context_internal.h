@@ -25,6 +25,7 @@
 typedef struct _net_nfc_client_context_info_t
 {
 	/* Permanent property */
+	char *id;
 	pid_t pid;
 	pid_t pgid;
 
@@ -36,12 +37,21 @@ typedef struct _net_nfc_client_context_info_t
 	bool isTransactionFgDispatch;
 } net_nfc_client_context_info_t;
 
+typedef void (*net_nfc_server_gdbus_on_client_detached_cb)(
+	net_nfc_client_context_info_t *client);
+
 typedef void (*net_nfc_server_gdbus_for_each_client_cb)(
 	net_nfc_client_context_info_t *client, void *user_param);
 
 void net_nfc_server_gdbus_init_client_context();
 
 void net_nfc_server_gdbus_deinit_client_context();
+
+void net_nfc_server_gdbus_register_on_client_detached_cb(
+	net_nfc_server_gdbus_on_client_detached_cb cb);
+
+void net_nfc_server_gdbus_unregister_on_client_detached_cb(
+	net_nfc_server_gdbus_on_client_detached_cb cb);
 
 bool net_nfc_server_gdbus_check_privilege(GDBusMethodInvocation *invocation,
 	GVariant *privilege,

@@ -117,20 +117,14 @@ bool net_nfc_controller_secure_element_set_default_route(
 bool net_nfc_controller_secure_element_clear_aid_table(net_nfc_error_e *result);
 bool net_nfc_controller_secure_element_get_aid_table_size(int *AIDTableSize, net_nfc_error_e *result);
 
-bool net_nfc_controller_secure_element_set_route_by_tech
-	(int tech, bool tech_screenOn, bool tech_screenOff, bool tech_screenLock,
-	net_nfc_se_type_e se_type, bool tech_switchOn, bool tech_switchOff, bool tech_batteryOff,
-	net_nfc_error_e *result);
+bool net_nfc_controller_secure_element_set_route_entry
+	(net_nfc_se_entry_type_e type, net_nfc_se_tech_protocol_type_e value, net_nfc_se_type_e route, int power, net_nfc_error_e *result);
 
-bool net_nfc_controller_secure_element_set_route_by_proto
-	(int proto, bool proto_screenOn, bool proto_screenOff, bool proto_screenLock,
-	net_nfc_se_type_e se_type, bool proto_switchOn, bool proto_switchOff, bool proto_batteryOff,
-	net_nfc_error_e *result);
+bool net_nfc_controller_secure_element_set_clear_routing_entry
+	(net_nfc_se_entry_type_e type, net_nfc_error_e *result);
 
-bool net_nfc_controller_secure_element_default_tech_route
-	(net_nfc_se_type_e se_type, int tech_switchon, int tech_switchoff, net_nfc_error_e *result);
+bool net_nfc_controller_set_screen_state
+	(net_nfc_screen_state_type_e screen_state, net_nfc_error_e *result);
 
-bool net_nfc_controller_secure_element_default_proto_route
-	(net_nfc_se_type_e se_type, int proto_switchon, int proto_switchoff, net_nfc_error_e *result);
 
 #endif //__NET_NFC_CONTROLLER_INTERNAL_H__

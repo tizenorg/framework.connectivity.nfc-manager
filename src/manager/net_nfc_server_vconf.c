@@ -18,22 +18,14 @@
 #include <vconf.h>
 
 #include "net_nfc_typedef.h"
-
-#include "net_nfc_server_vconf.h"
+#include "net_nfc_debug_internal.h"
 #include "net_nfc_server_common.h"
 #include "net_nfc_server_manager.h"
-
-#include "net_nfc_debug_internal.h"
 #include "net_nfc_server_se.h"
-
-#ifdef ENABLE_TELEPHONY
-static void vconf_set_flight_mode(int boolval);
-#endif
+#include "net_nfc_server_route_table.h"
+#include "net_nfc_server_vconf.h"
 
 static void net_nfc_server_vconf_lock_state_changed(keynode_t *key,
-						void *user_data);
-
-static void net_nfc_server_vconf_set_wizard_changed(keynode_t *key,
 						void *user_data);
 
 static void net_nfc_server_vconf_pm_state_changed(keynode_t *key,
@@ -44,21 +36,6 @@ static void net_nfc_server_vconf_flight_mode_changed(keynode_t *key,
 						void *user_data);
 #endif
 
-#ifdef ENABLE_TELEPHONY
-static void vconf_set_flight_mode(int boolval)
-{
-	gint result;
-
-	/* set predefined item */
-	result = vconf_set_bool(VCONFKEY_NFC_PREDEFINED_ITEM_STATE, boolval);
-	if (result != 0)
-	{
-		DEBUG_ERR_MSG("can not set to %d: %s",
-				boolval,
-				"VCONKEY_NFC_PREDEFINED_ITEM_STATE");
-	}
-}
-#endif
 static void net_nfc_server_vconf_lock_state_changed(keynode_t *key,
 						void *user_data)
 {
@@ -88,29 +65,6 @@ static void net_nfc_server_vconf_lock_state_changed(keynode_t *key,
 	}
 
 }
-
-static void net_nfc_server_vconf_set_wizard_changed(keynode_t *key,
-						void *user_data)
-{
-
-	gint state = 0;
-	gint result;
-
-	DEBUG_SERVER_MSG("nfc state: %d", state);
-
-	result = vconf_get_bool(VCONFKEY_NFC_STATE, &state);
-	if (result != 0)
-		DEBUG_ERR_MSG("can not get %s", "VCONFKEY_NFC_STATE");
-
-	if (state == false)
-	{
-		DEBUG_MSG("NFC off");
-		return;
-	}
-
-	net_nfc_server_restart_polling_loop();
-}
-
 
 static void net_nfc_server_vconf_pm_state_changed(keynode_t *key,
 						void *user_data)
@@ -157,6 +111,7 @@ static void net_nfc_server_vconf_pm_state_changed(keynode_t *key,
 	}
 }
 
+#ifdef ENABLE_TELEPHONY
 static void net_nfc_server_vconf_flight_mode_changed(keynode_t *key,
 						void *user_data)
 {
@@ -200,8 +155,6 @@ static void net_nfc_server_vconf_flight_mode_changed(keynode_t *key,
 			DEBUG_ERR_MSG("Can not set %s",
 						"VCONFKEY_NFC_STATE_OFF_BY_FLIGHT");
 		}
-
-		vconf_set_flight_mode(0);
 	}
 	else /* turn off flight mode */
 	{
@@ -230,15 +183,16 @@ static void net_nfc_server_vconf_flight_mode_changed(keynode_t *key,
 			DEBUG_ERR_MSG("Can not set %s",
 						"VCONFKEY_NFC_STATE_OFF_BY_FLIGHT");
 		}
-
-		vconf_set_flight_mode(1);
 	}
 }
+#endif
 
 static void net_nfc_server_vconf_se_type_changed(keynode_t *key,
 						void *user_data)
 {
 	net_nfc_server_se_policy_apply();
+
+	net_nfc_server_route_table_do_update();
 }
 
 static void net_nfc_server_vconf_wallet_mode_changed(keynode_t *key,
@@ -253,6 +207,56 @@ static void net_nfc_server_vconf_wallet_mode_changed(keynode_t *key,
 	DEBUG_SERVER_MSG("wallet mode [%d]", wallet_mode);
 
 	net_nfc_server_se_change_wallet_mode(wallet_mode);
+
+	net_nfc_server_route_table_do_update();
+}
+
+static void __on_payment_handler_changed_func(gpointer user_data)
+{
+	char *package = (char *)user_data;
+
+	DEBUG_SERVER_MSG("PAYMENT handler changed, [%s]", package);
+
+	net_nfc_server_route_table_update_category_handler(package,
+		NET_NFC_CARD_EMULATION_CATEGORY_PAYMENT);
+
+	if (package != NULL) {
+		g_free(package);
+	}
+}
+
+static void net_nfc_server_vconf_payment_handlers_changed(keynode_t *key,
+	void *user_data)
+{
+	g_assert(key != NULL);
+
+	net_nfc_server_controller_async_queue_push(
+		__on_payment_handler_changed_func,
+		g_strdup(key->value.s));
+}
+
+static void __on_other_handlers_changed_func(gpointer user_data)
+{
+	char *packages = (char *)user_data;
+
+	DEBUG_SERVER_MSG("OTHER handlers changed, [%s]", packages);
+
+	net_nfc_server_route_table_update_category_handler(packages,
+		NET_NFC_CARD_EMULATION_CATEGORY_OTHER);
+
+	if (packages != NULL) {
+		g_free(packages);
+	}
+}
+
+static void net_nfc_server_vconf_other_handlers_changed(keynode_t *key,
+	void *user_data)
+{
+	g_assert(key != NULL);
+
+	net_nfc_server_controller_async_queue_push(
+		__on_other_handlers_changed_func,
+		g_strdup(key->value.s));
 }
 
 void net_nfc_server_vconf_init(void)
@@ -278,6 +282,14 @@ void net_nfc_server_vconf_init(void)
 	vconf_notify_key_changed(VCONFKEY_NFC_WALLET_MODE,
 			net_nfc_server_vconf_wallet_mode_changed,
 			NULL);
+
+	vconf_notify_key_changed(VCONFKEY_NFC_PAYMENT_HANDLERS,
+			net_nfc_server_vconf_payment_handlers_changed,
+			NULL);
+
+	vconf_notify_key_changed(VCONFKEY_NFC_OTHER_HANDLERS,
+			net_nfc_server_vconf_other_handlers_changed,
+			NULL);
 }
 
 void net_nfc_server_vconf_deinit(void)
@@ -294,6 +306,12 @@ void net_nfc_server_vconf_deinit(void)
 
 	vconf_ignore_key_changed(VCONFKEY_NFC_WALLET_MODE,
 			net_nfc_server_vconf_wallet_mode_changed);
+
+	vconf_ignore_key_changed(VCONFKEY_NFC_PAYMENT_HANDLERS,
+			net_nfc_server_vconf_payment_handlers_changed);
+
+	vconf_ignore_key_changed(VCONFKEY_NFC_OTHER_HANDLERS,
+			net_nfc_server_vconf_other_handlers_changed);
 }
 
 bool net_nfc_check_csc_vconf(void)

@@ -98,6 +98,12 @@ static net_nfc_error_e manager_active(void)
 	/* start addons */
 	net_nfc_addons_init();
 
+	/* update route table */
+	net_nfc_server_route_table_do_update();
+
+	/* current comsume issue for card only model */
+	net_nfc_controller_set_screen_state(NET_NFC_SCREEN_OFF , &result);
+
 	if (net_nfc_controller_configure_discovery(
 				NET_NFC_DISCOVERY_MODE_START,
 				NET_NFC_ALL_ENABLE,

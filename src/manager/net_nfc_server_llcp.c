@@ -2150,6 +2150,11 @@ static void llcp_simple_receive_cb(net_nfc_llcp_socket_t socket,
 	g_free(simple_data);
 }
 
+static void _llcp_on_client_detached_cb(net_nfc_client_context_info_t *client)
+{
+	net_nfc_server_llcp_unregister_services(client->id);
+}
+
 /* Public Function */
 gboolean net_nfc_server_llcp_init(GDBusConnection *connection)
 {
@@ -2226,12 +2231,15 @@ gboolean net_nfc_server_llcp_init(GDBusConnection *connection)
 		connection,
 		"/org/tizen/NetNfcService/Llcp",
 		&error);
-	if (result == FALSE)
-	{
+	if (result == TRUE) {
+		net_nfc_server_gdbus_register_on_client_detached_cb(
+			_llcp_on_client_detached_cb);
+	} else {
 		g_error_free(error);
 
 		net_nfc_server_llcp_deinit();
 	}
+
 
 	return result;
 }
@@ -2240,6 +2248,9 @@ void net_nfc_server_llcp_deinit(void)
 {
 	if (llcp_skeleton)
 	{
+		net_nfc_server_gdbus_unregister_on_client_detached_cb(
+			_llcp_on_client_detached_cb);
+
 		g_object_unref(llcp_skeleton);
 		llcp_skeleton = NULL;
 	}

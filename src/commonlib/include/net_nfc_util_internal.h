@@ -71,6 +71,11 @@ bool net_nfc_util_append_data(data_s *dest, data_s *src);
 void net_nfc_util_clear_data(data_s *data);
 void net_nfc_util_free_data(data_s *data);
 
+net_nfc_conn_handover_carrier_state_e net_nfc_util_get_cps(net_nfc_conn_handover_carrier_type_e carrier_type);
+
+uint8_t *net_nfc_util_get_local_bt_address();
+void net_nfc_util_enable_bluetooth(void);
+
 bool net_nfc_util_strip_string(char *buffer, int buffer_length);
 
 void net_nfc_util_compute_CRC(CRC_type_e CRC_type, uint8_t *buffer, uint32_t length);

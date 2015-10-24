@@ -17,6 +17,7 @@
 #define __NET_NFC_APP_UTIL_INTERNAL_H__
 
 #include <aul.h>
+#include <bundle_internal.h>
 #include "net_nfc_typedef_internal.h"
 
 #ifndef MESSAGE_STORAGE
@@ -37,10 +38,10 @@
 // signal 2
 #define IDS_NO_APPLICATIONS_CAN_PERFORM_THIS_ACTION	\
 	gettext("IDS_COM_BODY_NO_APPLICATIONS_CAN_PERFORM_THIS_ACTION")
-// signal 3
+
 #define IDS_FAILED_TO_PAIR_WITH_PS	\
 	gettext("IDS_NFC_TPOP_FAILED_TO_PAIR_WITH_PS")
-// signal 4
+
 #define IDS_FAILED_TO_CONNECT_TO_PS	\
 	gettext("IDS_NFC_TPOP_FAILED_TO_CONNECT_TO_PS")
 

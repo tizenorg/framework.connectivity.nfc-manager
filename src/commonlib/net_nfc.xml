@@ -570,6 +570,16 @@
     </method>
 
     <!--
+      GetRegisteredHandlers
+    -->
+    <method name="GetRegisteredHandlers">
+      <arg type="u" name="category" direction="in" />
+      <arg type="a(y)" name="privilege" direction="in" />
+      <arg type="i" name="result" direction="out" />
+      <arg type="a(s)" name="packages" direction="out" />
+    </method>
+
+    <!--
       EseDetected
     -->
     <signal name="EseDetected">

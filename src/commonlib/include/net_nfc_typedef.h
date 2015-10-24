@@ -535,6 +535,32 @@ typedef enum
 	NET_NFC_SE_TYPE_HCE = 0x04, /* SDCard type is not currently supported */
 } net_nfc_se_type_e;
 
+ typedef enum
+ {
+	NET_NFC_SE_INVALID_ENTRY = 0x00, /**< Indicates SE type is Invalid */
+	NET_NFC_SE_TECH_ENTRY = 0x01, /*Technology*/
+	NET_NFC_SE_PROTOCOL_ENTRY = 0x02, /*Protocol*/
+} net_nfc_se_entry_type_e;
+
+typedef enum
+{
+	NET_NFC_SE_INVALID_TECH_PROTO = 0x00, /**< Indicates SE type is Invalid */
+	NET_NFC_SE_TECH_A_ISODEP = 0x01,/*Type A /ISO DEP*/
+	NET_NFC_SE_TECH_B_NFCDEP = 0x02,/*Type B / NFC DEP*/
+	NET_NFC_SE_TECH_A_B_ISO_NFC_DEP = 0x03,/*Type B / NFC DEP*/
+	NET_NFC_SE_TECH_F = 0x04,/*Type F*/
+} net_nfc_se_tech_protocol_type_e;
+
+typedef enum
+{
+	NET_NFC_SE_INVALID = 0x00, /**< Indicates SE type is Invalid */
+	NET_NFC_SE_SWITCH_ON = 0x01,/* Target On*/
+	NET_NFC_SE_SWITCH_OFF = 0x02,/*Target Off*/
+	NET_NFC_SE_SCREEN_OFF = 0x08,
+	NET_NFC_SE_SCREEN_ON_LOCK = 0x10,
+	NET_NFC_SE_SCREEN_ON_UNLOCK = 0x20,
+} net_nfc_se_power_state_type_e;
+
 typedef enum
 {
 	NET_NFC_SIGN_TYPE_NO_SIGN = 0,
@@ -587,6 +613,7 @@ typedef enum
 	NET_NFC_CARD_EMULATION_CATEGORY_UNKNOWN = 0,
 	NET_NFC_CARD_EMULATION_CATEGORY_PAYMENT = 1,
 	NET_NFC_CARD_EMULATION_CATEGORY_OTHER = 2,
+	NET_NFC_CARD_EMULATION_CATEGORY_MAX = 3,
 }
 net_nfc_card_emulation_category_t;
 

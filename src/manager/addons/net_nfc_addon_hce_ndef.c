@@ -16,7 +16,9 @@
 
 #include <glib.h>
 
-#include "bluetooth-api.h"
+#include "vconf.h"
+#include <bluetooth.h>
+#include <bluetooth_internal.h>
 
 #include "net_nfc_typedef_internal.h"
 #include "net_nfc_debug_internal.h"
@@ -24,6 +26,7 @@
 #include "net_nfc_util_internal.h"
 #include "net_nfc_server_route_table.h"
 #include "net_nfc_addon_hce.h"
+#include "net_nfc_addon_hce_ndef.h"
 
 
 #define MAPPING_VERSION			0x20
@@ -31,11 +34,11 @@
 #define NDEF_FILE_CONTROL_TAG		0x04
 #define PROPRIETARY_FILE_CONTROL_TAG	0x05
 
+#define MAX_NDEF_LEN			0x1000
+#define MAX_NDEF_DEF			0x10, 0x00
+
 #define COND_ALL_ACCESS			0x00
 #define COND_NO_ACCESS			0xFF
-
-
-#define MAX_LEN				0xFF
 
 #define CC_FID				0xE1, 0x03
 #define NDEF_FID			0xE1, 0x05
@@ -75,115 +78,26 @@ static uint8_t ndef_aid[] = { 0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01 };
 static uint8_t cc_fid[] = { CC_FID };
 static uint8_t ndef_fid[] = { NDEF_FID };
 
-static uint8_t template_ndef_data[] = {
-	/* record 1 */
-	0x91, /* MB, SR, WKT */
-	0x02, /* record type len */
-	0x0A, /* payload len */
-	0x48, 0x73, /* record type "Hs" */
-	/* payload */
-	0x12, /* handover version */
-		/* inner ndef */
-		0xD1, /* MB, ME, SR, WKT */
-		0x02, /* record type len */
-		0x04, /* payload len */
-		0x61, 0x63, /* record type "ac" */
-		/* payload */
-		0x03, /* carrier flag : unknown*/
-		0x01, /* carrier data reference len */
-		0x30, /* carrier data reference '0' */
-	/* record 2 */
-	0x5A, /*  ME, SR, IL, WKT */
-	0x20, /* record type len */
-	0x20, /* payload len, offset : 19 */
-	0x01, /* id len */
-	0x61, 0x70, 0x70, 0x6C, /* record type "application/vnd.bluetooth.ep.oob" */
-	0x69, 0x63, 0x61, 0x74,
-	0x69, 0x6F, 0x6E, 0x2F,
-	0x76, 0x6E, 0x64, 0x2E,
-	0x62, 0x6C, 0x75, 0x65,
-	0x74, 0x6F, 0x6F, 0x74,
-	0x68, 0x2E, 0x65, 0x70,
-	0x2E, 0x6F, 0x6F, 0x62,
-	0x30, /* id '0' */
-	/* payload */
-	0x15, 0x00, /* oob len, offset : 54 */
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* bluetooth addresss, offset : 56 */
-
-	0x04, /* eir data len */
-	0x0D, /* data type : cod */
-	0x00, 0x00, 0x00, /* cod */
-
-	0x05, /* eir data len */
-	0x03, /* data type : uuid */
-	0x00, 0x00, 0x00, 0x00, /* uuid */
-
-	0x00, /* eir data len, offset : 73 */
-	0x09, /* data type : local name */
-};
-
 static uint8_t cc_data[] = {
 	0x00, 0x0F, /* cclen */
 	MAPPING_VERSION, /* version */
-	0x00, MAX_LEN, /* mlc */
-	0x00, MAX_LEN, /* mle */
+	0x00, 0x3B, /* max lc */
+	0x00, 0x34, /* max le */
 	NDEF_FILE_CONTROL_TAG, /* tag */
 	0x06, /* len */
 	NDEF_FID, /* ndef fid */
-	0x10, 0x00, /* max ndef len */
+	MAX_NDEF_DEF, /* max ndef len */
 	COND_ALL_ACCESS, /* read right */
 	COND_NO_ACCESS, /* write right */
 };
 
+static uint16_t ndef_len;
 static ndef_data_t *ndef_data;
 
 static uint8_t *selected_aid;
 static uint8_t *selected_fid;
 
-static void __fill_ndef_data(void)
-{
-	size_t name_len;
-	uint16_t ndef_len;
-	bluetooth_device_name_t name;
-	bluetooth_device_address_t address;
-	int result;
-
-	if (ndef_data != NULL) {
-		g_free(ndef_data);
-	}
-
-	/* get device name */
-	result = bluetooth_get_local_name(&name);
-	if (result != BLUETOOTH_ERROR_NONE) {
-		DEBUG_ERR_MSG("bluetooth_get_local_name failed [%d]", result);
-	}
-
-	name_len = strlen(name.name);
-
-	ndef_len = sizeof(template_ndef_data) + name_len;
-
-	ndef_data = g_malloc0(sizeof(*ndef_data) + ndef_len);
-
-	/* fill */
-	ndef_data->len = ENDIAN_16(ndef_len);
-	memcpy(ndef_data->data, template_ndef_data, sizeof(template_ndef_data));
-
-	/* update bluetooth device address */
-	result = bluetooth_get_local_address(&address);
-	if (result != BLUETOOTH_ERROR_NONE) {
-		DEBUG_ERR_MSG("bluetooth_get_local_address failed [%d]", result);
-	}
-
-	memcpy(ndef_data->data + 56, address.addr, sizeof(address.addr));
-
-	/* append name */
-	memcpy(ndef_data->data + sizeof(template_ndef_data), name.name, name_len);
-
-	/* update size fields */
-	ndef_data->data[19] += (uint8_t)name_len; /* payload len */
-	ndef_data->data[54] += (uint8_t)name_len; /* oob len */
-	ndef_data->data[73] += (uint8_t)name_len; /* eir data (device name) len */
-}
+static bool enabled;
 
 static void __send_response(net_nfc_target_handle_s *handle, uint16_t sw, uint8_t *resp, size_t len)
 {
@@ -284,7 +198,7 @@ static void __process_command(net_nfc_target_handle_s *handle, data_s *cmd)
 		}
 	} else if (apdu->ins == NET_NFC_HCE_INS_READ_BINARY) {
 		if (apdu->lc != NET_NFC_HCE_INVALID_VALUE ||
-			apdu->data != NULL || apdu->le == 1) {
+			apdu->data != NULL || apdu->le == NET_NFC_HCE_INVALID_VALUE) {
 			DEBUG_ERR_MSG("wrong parameter, lc [%d], data [%p], le [%d]", apdu->lc, apdu->data, apdu->le);
 			__send_response(handle, NET_NFC_HCE_SW_LC_INCONSIST_P1_TO_P2, NULL, 0);
 			goto END;
@@ -336,12 +250,6 @@ END :
 	}
 }
 
-static void __bluetooth_event_cb(int event, bluetooth_event_param_t *param,
-	void *user_data)
-{
-
-}
-
 static void __nfc_addon_hce_ndef_listener(net_nfc_target_handle_s *handle,
 	int event, data_s *data, void *user_data)
 {
@@ -368,51 +276,91 @@ static void __nfc_addon_hce_ndef_listener(net_nfc_target_handle_s *handle,
 	}
 }
 
-static void _nfc_addon_hce_ndef_init(void)
+static void __nfc_addon_hce_ndef_init(void)
 {
 	DEBUG_ADDON_MSG(">>>>");
 
-	if (bluetooth_is_supported() == 1) {
-		bluetooth_register_callback(__bluetooth_event_cb, NULL);
-
-		__fill_ndef_data();
-
-		net_nfc_server_route_table_add_aid(NULL, "nfc-manager",
-			NET_NFC_SE_TYPE_HCE,
-			NET_NFC_CARD_EMULATION_CATEGORY_OTHER,
-			false, NDEF_AID);
-	}
+	enabled = false;
+	ndef_len = MAX_NDEF_LEN;
+	ndef_data = g_malloc0(ndef_len);
 }
 
-static void _nfc_addon_hce_ndef_pause(void)
+static void __nfc_addon_hce_ndef_pause(void)
 {
 	DEBUG_ADDON_MSG(">>>>");
 }
 
-static void _nfc_addon_hce_ndef_resume(void)
+static void __nfc_addon_hce_ndef_resume(void)
 {
 	DEBUG_ADDON_MSG(">>>>");
 }
 
-static void _nfc_addon_hce_ndef_deinit(void)
+static void __nfc_addon_hce_ndef_deinit(void)
 {
 	DEBUG_ADDON_MSG(">>>>");
 
-	if (bluetooth_is_supported() == 1) {
-		net_nfc_server_route_table_del_aid(NULL, "nfc-manager",
-			NDEF_AID, false);
+	net_nfc_addon_hce_ndef_disable();
 
-		bluetooth_unregister_callback();
-	}
+	g_free(ndef_data);
 }
 
 net_nfc_addon_hce_ops_t net_nfc_addon_hce_ndef_ops = {
 	.name = "HCE NDEF EMUL",
-	.init = _nfc_addon_hce_ndef_init,
-	.pause = _nfc_addon_hce_ndef_pause,
-	.resume = _nfc_addon_hce_ndef_resume,
-	.deinit = _nfc_addon_hce_ndef_deinit,
+	.init = __nfc_addon_hce_ndef_init,
+	.pause = __nfc_addon_hce_ndef_pause,
+	.resume = __nfc_addon_hce_ndef_resume,
+	.deinit = __nfc_addon_hce_ndef_deinit,
 
 	.aid = NDEF_AID,
 	.listener = __nfc_addon_hce_ndef_listener,
 };
+
+void net_nfc_addon_hce_ndef_enable(void)
+{
+	net_nfc_error_e result = NET_NFC_OK;
+
+	if (enabled == false) {
+		if (net_nfc_server_route_table_find_aid("nfc-manager",
+			NDEF_AID) == NULL) {
+			result = net_nfc_server_route_table_add_aid(NULL, "nfc-manager",
+				NET_NFC_SE_TYPE_HCE,
+				NET_NFC_CARD_EMULATION_CATEGORY_OTHER,
+				NDEF_AID);
+		}
+
+		if (result == NET_NFC_OK) {
+			enabled = true;
+		} else {
+			DEBUG_ERR_MSG("net_nfc_server_route_table_add_aid failed, [%d]", result);
+		}
+	}
+}
+
+net_nfc_error_e net_nfc_addon_hce_ndef_set_data(data_s *data)
+{
+	if (data == NULL || data->buffer == NULL) {
+		return NET_NFC_NULL_PARAMETER;
+	}
+
+	if (data->length > (ndef_len - sizeof(*ndef_data))) {
+		return NET_NFC_INSUFFICIENT_STORAGE;
+	}
+
+	ndef_data->len = ENDIAN_16((uint16_t)data->length);
+	memcpy(ndef_data->data, data->buffer, data->length);
+
+	return NET_NFC_OK;
+}
+
+void net_nfc_addon_hce_ndef_disable(void)
+{
+	if (enabled == true) {
+		if (net_nfc_server_route_table_find_aid("nfc-manager",
+			NDEF_AID) != NULL) {
+			net_nfc_server_route_table_del_aid(NULL, "nfc-manager",
+				NDEF_AID, false);
+		}
+
+		enabled = false;
+	}
+}

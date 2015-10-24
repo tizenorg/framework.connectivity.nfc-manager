@@ -16,13 +16,16 @@ IF("${CMAKE_BUILD_TYPE}" STREQUAL "")
 	SET(CMAKE_BUILD_TYPE "Release")
 ENDIF("${CMAKE_BUILD_TYPE}" STREQUAL "")
 
+# for package file
+SET(dependents "aul glib-2.0 gio-unix-2.0 security-server vconf dlog tapi appsvc libcurl bluetooth-api capi-network-bluetooth openssl deviced feedback capi-media-wav-player ecore-x mm-keysound syspopup-caller notification capi-network-wifi capi-network-wifi-direct capi-system-info sqlite3 libprivilege-control")
+
 IF (TIZEN_TELEPHONY_ENABLED)
 	MESSAGE("-DENABLE_TELEPHONY")
 	ADD_DEFINITIONS(-DENABLE_TELEPHONY)
 ENDIF (TIZEN_TELEPHONY_ENABLED)
 
 INCLUDE(FindPkgConfig)
-pkg_check_modules(manager_pkges REQUIRED aul glib-2.0 gio-unix-2.0 security-server vconf dlog tapi appsvc libcurl bluetooth-api capi-network-bluetooth openssl deviced feedback capi-media-wav-player ecore-x mm-keysound syspopup-caller notification capi-network-wifi capi-network-wifi-direct capi-system-info sqlite3)
+pkg_check_modules(manager_pkges REQUIRED ${dependents})
 
 FOREACH(flag ${manager_pkges_CFLAGS})
 	SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag}")
@@ -50,15 +53,20 @@ IF("${ARCH}" MATCHES "^arm.*")
 ENDIF()
 
 # for addons
-#ADD_DEFINITIONS("-DADDON_HCE_NDEF")
+ADD_DEFINITIONS("-DADDON_HCE_NDEF")
 #ADD_DEFINITIONS("-DADDON_HCE_PPSE")
+#ADD_DEFINITIONS("-DADDON_HCE_TMONEY")
 
 ADD_DEFINITIONS("-DPREFIX=\"${PREFIX}\"")
 ADD_DEFINITIONS("-DNFC_MANAGER_MODULEDIR=\"${MODULEDIR}\"")
 
 ADD_DEFINITIONS("-DUSE_FULL_URI")
 #ADD_DEFINITIONS("-DESE_ALWAYS_ON")
-#ADD_DEFINITIONS("-DEMERGENCY_MODE")
+
+IF (TIZEN_MDM_ENABLE)
+	MESSAGE("-DENABLE_MDM")
+	ADD_DEFINITIONS("-DMDM_PHASE_2")
+ENDIF (TIZEN_TELEPHONY_ENABLED)
 
 SET(CMAKE_EXE_LINKER_FLAGS "-Wl,--as-needed -pie")
 
@@ -68,5 +76,6 @@ TARGET_LINK_LIBRARIES(${NFC_MANAGER_DAEMON} ${manager_pkges_LDFLAGS} pthread dl 
 LINK_DIRECTORIES(${CMAKE_BUILD_DIR}/src/commonlib ${CMAKE_BUILD_DIR}/src/clientlib)
 INSTALL(TARGETS ${NFC_MANAGER_DAEMON} DESTINATION bin)
 
-INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/org.tizen.NetNfcService.service DESTINATION share/dbus-1/services)
+INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/org.tizen.NetNfcService.service
+DESTINATION share/dbus-1/system-services)
 INSTALL(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/sounds DESTINATION share/nfc-manager-daemon)

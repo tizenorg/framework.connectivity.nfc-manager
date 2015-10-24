@@ -935,6 +935,10 @@ net_nfc_error_e net_nfc_server_se_apply_se_policy(
 {
 	net_nfc_error_e result = NET_NFC_OK;
 
+	net_nfc_controller_secure_element_set_clear_routing_entry(NET_NFC_SE_TECH_ENTRY, &result);
+
+	net_nfc_controller_secure_element_set_clear_routing_entry(NET_NFC_SE_PROTOCOL_ENTRY, &result);
+
 	switch (policy)
 	{
 	case SECURE_ELEMENT_POLICY_UICC_ON :
@@ -954,10 +958,20 @@ net_nfc_error_e net_nfc_server_se_apply_se_policy(
 				SECURE_ELEMENT_TYPE_UICC,
 				SECURE_ELEMENT_VIRTUAL_MODE,
 				&result);
-
+#if 0
 			net_nfc_controller_secure_element_set_default_route(
 				NET_NFC_SE_TYPE_UICC, NET_NFC_SE_TYPE_NONE,
 				NET_NFC_SE_TYPE_UICC, &result);
+#else
+			net_nfc_controller_secure_element_set_route_entry(
+			NET_NFC_SE_TECH_ENTRY, NET_NFC_SE_TECH_A_B_ISO_NFC_DEP,
+			NET_NFC_SE_TYPE_UICC, 0x39, &result);
+
+			net_nfc_controller_secure_element_set_route_entry(
+			NET_NFC_SE_PROTOCOL_ENTRY, NET_NFC_SE_TECH_A_B_ISO_NFC_DEP,
+			NET_NFC_SE_TYPE_UICC, 0x39, &result);
+
+#endif
 
 			current_policy = policy;
 		}
@@ -982,11 +996,20 @@ net_nfc_error_e net_nfc_server_se_apply_se_policy(
 			SECURE_ELEMENT_TYPE_ESE,
 			SECURE_ELEMENT_VIRTUAL_MODE,
 			&result);
-
+#if 0
 		net_nfc_controller_secure_element_set_default_route(
 			NET_NFC_SE_TYPE_ESE, NET_NFC_SE_TYPE_NONE,
 			NET_NFC_SE_TYPE_ESE, &result);
+#else
+		net_nfc_controller_secure_element_set_route_entry(
+		NET_NFC_SE_TECH_ENTRY, NET_NFC_SE_TECH_A_B_ISO_NFC_DEP,
+		NET_NFC_SE_TYPE_ESE, 0x39, &result);
 
+		net_nfc_controller_secure_element_set_route_entry(
+		NET_NFC_SE_PROTOCOL_ENTRY, NET_NFC_SE_TECH_A_B_ISO_NFC_DEP,
+		NET_NFC_SE_TYPE_ESE, 0x39, &result);
+
+#endif
 		current_policy = policy;
 		break;
 
@@ -1005,11 +1028,20 @@ net_nfc_error_e net_nfc_server_se_apply_se_policy(
 			SECURE_ELEMENT_TYPE_HCE,
 			SECURE_ELEMENT_VIRTUAL_MODE,
 			&result);
-
+#if 0
 		net_nfc_controller_secure_element_set_default_route(
 			NET_NFC_SE_TYPE_HCE, NET_NFC_SE_TYPE_NONE,
 			NET_NFC_SE_TYPE_HCE, &result);
+#else
+		net_nfc_controller_secure_element_set_route_entry(
+		NET_NFC_SE_TECH_ENTRY, NET_NFC_SE_TECH_A_B_ISO_NFC_DEP,
+		NET_NFC_SE_TYPE_HCE, 0x39, &result);
 
+		net_nfc_controller_secure_element_set_route_entry(
+		NET_NFC_SE_PROTOCOL_ENTRY, NET_NFC_SE_TECH_A_B_ISO_NFC_DEP,
+		NET_NFC_SE_TYPE_HCE, 0x39, &result);
+
+#endif
 		current_policy = policy;
 		break;
 
@@ -1031,11 +1063,20 @@ net_nfc_error_e net_nfc_server_se_apply_se_policy(
 			SECURE_ELEMENT_TYPE_HCE,
 			SECURE_ELEMENT_OFF_MODE,
 			&result);
-
+#if 0
 		net_nfc_controller_secure_element_set_default_route(
 			NET_NFC_SE_TYPE_NONE, NET_NFC_SE_TYPE_NONE,
 			NET_NFC_SE_TYPE_NONE, &result);
+#else
+		net_nfc_controller_secure_element_set_route_entry(
+		NET_NFC_SE_INVALID_ENTRY, NET_NFC_SE_INVALID_TECH_PROTO,
+		NET_NFC_SE_TYPE_NONE, 0x39, &result);
 
+		net_nfc_controller_secure_element_set_route_entry(
+		NET_NFC_SE_INVALID_ENTRY, NET_NFC_SE_INVALID_TECH_PROTO,
+		NET_NFC_SE_TYPE_NONE, 0x39, &result);
+
+#endif
 		current_policy = policy;
 		break;
 	}
@@ -1270,7 +1311,7 @@ static gboolean se_handle_get_atr(
 	/* check privilege and update client context */
 	if (net_nfc_server_gdbus_check_privilege(invocation,
 		smack_privilege,
-		"nfc-manager",
+		"nfc-manager::ese",
 		"r") == false) {
 		DEBUG_ERR_MSG("permission denied, and finished request");
 		result = NET_NFC_PERMISSION_DENIED;
@@ -1393,7 +1434,7 @@ static gboolean se_handle_open_secure_element(
 	/* check privilege and update client context */
 	if (net_nfc_server_gdbus_check_privilege(invocation,
 		smack_privilege,
-		"nfc-manager",
+		"nfc-manager::ese",
 		"rw") == false) {
 		DEBUG_ERR_MSG("permission denied, and finished request");
 		result = NET_NFC_PERMISSION_DENIED;
@@ -1515,7 +1556,7 @@ static gboolean se_handle_send_apdu(
 	/* check privilege and update client context */
 	if (net_nfc_server_gdbus_check_privilege(invocation,
 		smack_privilege,
-		"nfc-manager",
+		"nfc-manager::ese",
 		"rw") == false) {
 		DEBUG_ERR_MSG("permission denied, and finished request");
 		result = NET_NFC_PERMISSION_DENIED;
@@ -2027,7 +2068,7 @@ static gboolean se_handle_check_transaction_permission(
 	/* check privilege and update client context */
 	if (net_nfc_server_gdbus_check_privilege(invocation,
 		smack_privilege,
-		"nfc-manager",
+		"nfc-manager::card_emul",
 		"r") == false) {
 		DEBUG_ERR_MSG("permission denied, and finished request");
 		result = NET_NFC_PERMISSION_DENIED;
@@ -2119,7 +2160,7 @@ static gboolean se_handle_set_default_route(
 	/* check privilege and update client context */
 	if (net_nfc_server_gdbus_check_privilege(invocation,
 		smack_privilege,
-		"nfc-manager",
+		"nfc-manager::card_emul",
 		"rw") == false) {
 		DEBUG_ERR_MSG("permission denied, and finished request");
 		result = NET_NFC_PERMISSION_DENIED;
@@ -2188,7 +2229,25 @@ static void se_is_activated_aid_handler_thread_func(gpointer user_data)
 
 	handler = net_nfc_server_route_table_find_handler_by_id(id);
 	if (handler != NULL) {
-		activated = handler->activated;
+		int i;
+		aid_info_t *info;
+
+		for (i = 0; i < handler->aids[0]->len; i++) {
+			info = (aid_info_t *)handler->aids[0]->pdata[i];
+
+			if (g_ascii_strcasecmp(info->aid, data->aid) == 0) {
+				activated = handler->activated[info->category];
+				break;
+			}
+		}
+
+		if (i < handler->aids[0]->len) {
+			result = NET_NFC_OK;
+		} else {
+			result = NET_NFC_NO_DATA_FOUND;
+		}
+	} else {
+		result = NET_NFC_NO_DATA_FOUND;
 	}
 
 	net_nfc_gdbus_secure_element_complete_is_activated_aid_handler(
@@ -2271,7 +2330,7 @@ ERROR :
 static void se_is_activated_category_handler_thread_func(gpointer user_data)
 {
 	SeDataAid *data = (SeDataAid *)user_data;
-	net_nfc_error_e result = NET_NFC_OK;
+	net_nfc_error_e result;
 	route_table_handler_t *handler;
 	gboolean activated = false;
 	const char *id;
@@ -2286,7 +2345,10 @@ static void se_is_activated_category_handler_thread_func(gpointer user_data)
 
 	handler = net_nfc_server_route_table_find_handler_by_id(id);
 	if (handler != NULL) {
-		activated = handler->activated;
+		activated = handler->activated[data->category];
+		result = NET_NFC_OK;
+	} else {
+		result = NET_NFC_NO_DATA_FOUND;
 	}
 
 	net_nfc_gdbus_secure_element_complete_is_activated_category_handler(
@@ -2474,7 +2536,7 @@ ERROR :
 	GVariantBuilder builder;
 	GVariant *aids;
 
-	g_variant_builder_init(&builder, G_VARIANT_TYPE("a(s)"));
+	g_variant_builder_init(&builder, G_VARIANT_TYPE("a(sb)"));
 	aids = g_variant_builder_end(&builder);
 
 	net_nfc_gdbus_secure_element_complete_get_registered_aids(
@@ -2508,7 +2570,7 @@ static void se_register_aid_thread_func(gpointer user_data)
 
 	if (handler != NULL) {
 		result = net_nfc_server_route_table_add_aid_by_id(id,
-			data->se_type, data->category, false, data->aid);
+			data->se_type, data->category, data->aid);
 	}
 
 	net_nfc_gdbus_secure_element_complete_register_aid(
@@ -2710,7 +2772,8 @@ static void se_unregister_aids_thread_func(gpointer user_data)
 
 	handler = net_nfc_server_route_table_find_handler_by_id(id);
 	if (handler != NULL) {
-		result = net_nfc_server_route_table_del_handler_by_id(id);
+		result = net_nfc_server_route_table_del_aids(id,
+			handler->package, false);
 	} else {
 		result = NET_NFC_NO_DATA_FOUND;
 	}
@@ -2998,6 +3061,10 @@ static void se_remove_package_aids_thread_func(gpointer user_data)
 	INFO_MSG(">>> Call se_remove_package_aids_thread_func");
 
 	result = net_nfc_server_route_table_delete_aids_from_db(detail->package);
+	if (result == NET_NFC_OK) {
+		result = net_nfc_server_route_table_del_handler(NULL,
+			detail->package, true);
+	}
 
 	net_nfc_gdbus_secure_element_complete_remove_package_aids(
 		detail->object, detail->invocation, result);
@@ -3071,6 +3138,158 @@ ERROR :
 
 	net_nfc_gdbus_secure_element_complete_remove_package_aids(
 		object, invocation, result);
+
+	return TRUE;
+}
+
+static bool __check_category_iter_cb(const char *package,
+	route_table_handler_t *handler, aid_info_t *aid, void *user_data)
+{
+	gpointer* params = (gpointer *)user_data;
+
+	if (aid->category == (net_nfc_card_emulation_category_t)params[0]) {
+		g_variant_builder_add((GVariantBuilder *)params[1],
+			"(s)", package);
+
+		return false;
+	}
+
+	return true;
+}
+
+static bool __get_handlers_iter_cb(const char *package,
+	route_table_handler_t *handler, void *user_data)
+{
+	/* skip current package */
+	if (g_strcmp0(package, "nfc-manager") == 0) {
+		return true;
+	}
+
+	net_nfc_server_route_table_iterate_aid(package,
+		__check_category_iter_cb, user_data);
+
+	return true;
+}
+
+static void se_get_registered_handlers_thread_func(gpointer user_data)
+{
+	SeDataAid *data = (SeDataAid *)user_data;
+	net_nfc_error_e result = NET_NFC_OK;
+	GVariantBuilder builder;
+	GVariant *handlers;
+	gpointer params[2];
+
+	g_assert(data != NULL);
+	g_assert(data->object != NULL);
+	g_assert(data->invocation != NULL);
+
+	INFO_MSG(">>> Call se_get_registered_aids_thread_func");
+
+	g_variant_builder_init(&builder, G_VARIANT_TYPE("a(s)"));
+
+#ifdef ACCESS_CONTROL
+	pid_t pid;
+	const char *name;
+	bool ret = false;
+
+	name = g_dbus_method_invocation_get_sender(data->invocation);
+	pid = net_nfc_server_gdbus_get_pid(name);
+
+	ret = net_nfc_service_check_access_control(pid,
+		NET_NFC_ACCESS_CONTROL_PLATFORM);
+	if (ret == false)
+	{
+		DEBUG_ERR_MSG("access control denied");
+		result = NET_NFC_SECURITY_FAIL;
+
+		goto END;
+	}
+#endif
+	params[0] = (gpointer)data->category;
+	params[1] = &builder;
+
+	net_nfc_server_route_table_iterate_handler(__get_handlers_iter_cb,
+		params);
+
+#ifdef ACCESS_CONTROL
+END :
+#endif
+	handlers = g_variant_builder_end(&builder);
+
+	net_nfc_gdbus_secure_element_complete_get_registered_handlers(
+		data->object, data->invocation, result, handlers);
+
+	g_object_unref(data->invocation);
+	g_object_unref(data->object);
+
+	g_free(data);
+}
+
+static gboolean se_handle_get_registered_handlers(
+	NetNfcGDbusSecureElement *object,
+	GDBusMethodInvocation *invocation,
+	guint se_type,
+	guint category,
+	GVariant *smack_privilege)
+{
+	SeDataAid *data = NULL;
+	gint result;
+
+	INFO_MSG(">>> REQUEST from [%s]",
+		g_dbus_method_invocation_get_sender(invocation));
+
+	/* check privilege and update client context */
+	if (net_nfc_server_gdbus_check_privilege(invocation,
+		smack_privilege,
+		"nfc-manager::admin",
+		"r") == false) {
+		DEBUG_ERR_MSG("permission denied, and finished request");
+		result = NET_NFC_PERMISSION_DENIED;
+
+		goto ERROR;
+	}
+
+	data = g_try_new0(SeDataAid, 1);
+	if (data == NULL)
+	{
+		DEBUG_ERR_MSG("Memory allocation failed");
+		result = NET_NFC_ALLOC_FAIL;
+
+		goto ERROR;
+	}
+
+	data->object = g_object_ref(object);
+	data->invocation = g_object_ref(invocation);
+	data->category = category;
+
+	if (net_nfc_server_controller_async_queue_push_force(
+		se_get_registered_handlers_thread_func, data) == FALSE)
+	{
+		/* return error if queue was blocked */
+		DEBUG_SERVER_MSG("controller is processing important message..");
+		result = NET_NFC_BUSY;
+
+		goto ERROR;
+	}
+
+	return TRUE;
+
+ERROR :
+	if (data != NULL) {
+		g_object_unref(data->invocation);
+		g_object_unref(data->object);
+
+		g_free(data);
+	}
+
+	GVariantBuilder builder;
+	GVariant *packages;
+
+	g_variant_builder_init(&builder, G_VARIANT_TYPE("a(s)"));
+	packages = g_variant_builder_end(&builder);
+
+	net_nfc_gdbus_secure_element_complete_get_registered_handlers(
+		object, invocation, result, packages);
 
 	return TRUE;
 }
@@ -3189,6 +3408,11 @@ gboolean net_nfc_server_se_init(GDBusConnection *connection)
 	g_signal_connect(se_skeleton,
 		"handle-remove-package-aids",
 		G_CALLBACK(se_handle_remove_package_aids),
+		NULL);
+
+	g_signal_connect(se_skeleton,
+		"handle-get-registered-handlers",
+		G_CALLBACK(se_handle_get_registered_handlers),
 		NULL);
 
 	result = g_dbus_interface_skeleton_export(

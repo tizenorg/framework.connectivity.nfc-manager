@@ -34,6 +34,8 @@
 /*TODO : */
 #include "net_nfc_app_util_internal.h"
 
+#define OPERATION_APDU_RECEIVED		"http://tizen.org/appcontrol/operation/nfc/card_emulation/apdu_received"
+#define OPERATION_TRANSACTION_RECEIVED	"http://tizen.org/appcontrol/operation/nfc/card_emulation/transaction_received"
 
 static NetNfcGDbusHce *hce_skeleton = NULL;
 /*Routing Table base on AID*/
@@ -48,6 +50,7 @@ typedef struct _hce_listener_t
 	char *id;
 	char *package;
 	net_nfc_server_hce_listener_cb listener;
+	net_nfc_server_hce_user_data_destroy_cb destroy_cb;
 	void *user_data;
 }
 hce_listener_t;
@@ -81,7 +84,14 @@ struct _HceDataApdu
 	GVariant *data;
 };
 
-typedef void (*route_table_iter_cb)(hce_listener_t *data, void *user_data);
+typedef struct _hce_client_context_s
+{
+	GDBusConnection *connection;
+	char *id;
+}
+hce_client_context_s;
+
+typedef bool (*route_table_iter_cb)(hce_listener_t *data, void *user_data);
 
 
 static void __on_key_destroy(gpointer data)
@@ -98,6 +108,9 @@ static void __on_value_destroy(gpointer data)
 	if (data != NULL) {
 		if (listener->id != NULL) {
 			g_free(listener->id);
+		}
+		if (listener->package != NULL) {
+			g_free(listener->package);
 		}
 
 		g_free(data);
@@ -118,7 +131,8 @@ inline static hce_listener_t *_routing_table_find_aid(const char *package)
 }
 
 static net_nfc_error_e _routing_table_add(const char *package, const char *id,
-	net_nfc_server_hce_listener_cb listener, void *user_data)
+	net_nfc_server_hce_listener_cb listener,
+	net_nfc_server_hce_user_data_destroy_cb destroy_cb, void *user_data)
 {
 	net_nfc_error_e result;
 
@@ -128,10 +142,12 @@ static net_nfc_error_e _routing_table_add(const char *package, const char *id,
 
 		data = g_new0(hce_listener_t, 1);
 
+		data->package = g_strdup(package);
 		if (id != NULL) {
 			data->id = g_strdup(id);
 		}
 		data->listener = listener;
+		data->destroy_cb = destroy_cb;
 		data->user_data = user_data;
 
 		g_hash_table_insert(routing_table_aid,
@@ -155,6 +171,10 @@ static void _routing_table_del(const char *package)
 	if (data != NULL) {
 		DEBUG_SERVER_MSG("remove hce package, [%s]", package);
 
+		if (data->destroy_cb != NULL) {
+			data->destroy_cb(data->user_data);
+		}
+
 		g_hash_table_remove(routing_table_aid, package);
 	}
 }
@@ -171,12 +191,49 @@ static void _routing_table_iterate(route_table_iter_cb cb, void *user_data)
 	g_hash_table_iter_init (&iter, routing_table_aid);
 
 	while (g_hash_table_iter_next (&iter, &key, (gpointer)&data)) {
-		cb(data, user_data);
+		if (cb(data, user_data) == false) {
+			break;
+		}
 	}
 }
+
+static bool _del_by_id_cb(hce_listener_t *data, void *user_data)
+{
+	const char *id = user_data;
+	bool result;
+
+	if (data->id == NULL) {
+		if (id == NULL) {
+			DEBUG_MSG("remove context for nfc-manager");
+
+			result = false;
+		} else {
+			result = true;
+		}
+	} else {
+		if (id != NULL && g_ascii_strcasecmp(data->id, id) == 0) {
+			DEBUG_MSG("deleting package [%s:%s]", data->id, data->package);
+
+			_routing_table_del(data->package);
+
+			result = false;
+		} else {
+			result = true;
+		}
+	}
+
+	return result;
+}
+
+static void _routing_table_del_by_id(const char *id)
+{
+	_routing_table_iterate(_del_by_id_cb, (char *)id);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 net_nfc_error_e net_nfc_server_hce_start_hce_handler(const char *package,
-	const char *id, net_nfc_server_hce_listener_cb listener, void *user_data)
+	const char *id, net_nfc_server_hce_listener_cb listener,
+	net_nfc_server_hce_user_data_destroy_cb destroy_cb, void *user_data)
 {
 	net_nfc_error_e result;
 
@@ -184,7 +241,8 @@ net_nfc_error_e net_nfc_server_hce_start_hce_handler(const char *package,
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	result = _routing_table_add(package, id, listener, user_data);
+	result = _routing_table_add(package, id, listener,
+		destroy_cb, user_data);
 	if (result == NET_NFC_OK) {
 		result = net_nfc_server_route_table_add_handler(id, package);
 	}
@@ -194,18 +252,28 @@ net_nfc_error_e net_nfc_server_hce_start_hce_handler(const char *package,
 
 net_nfc_error_e net_nfc_server_hce_stop_hce_handler(const char *package)
 {
-	net_nfc_error_e result;
-
 	if (package == NULL || strlen(package) == 0) {
 		return NET_NFC_NULL_PARAMETER;
 	}
 
-	result = net_nfc_server_route_table_del_handler(NULL, package);
-	if (result == NET_NFC_OK) {
-		_routing_table_del(package);
+	_routing_table_del(package);
+
+	net_nfc_server_route_table_del_handler(NULL, package, false);
+
+	return NET_NFC_OK;
+}
+
+net_nfc_error_e net_nfc_server_hce_stop_hce_handler_by_id(const char *id)
+{
+	if (id == NULL || strlen(id) == 0) {
+		return NET_NFC_NULL_PARAMETER;
 	}
 
-	return result;
+	_routing_table_del_by_id(id);
+
+	net_nfc_server_route_table_del_handler_by_id(id);
+
+	return NET_NFC_OK;
 }
 
 net_nfc_error_e net_nfc_server_hce_send_apdu_response(
@@ -229,31 +297,54 @@ net_nfc_error_e net_nfc_server_hce_send_apdu_response(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static void _emit_event_received_signal(GDBusConnection *connection,
+	const char *id, int event,
+	net_nfc_target_handle_h handle,
+	data_s *data)
+{
+	GVariant *arg_data;
+	GError *error = NULL;
+
+	arg_data = net_nfc_util_gdbus_data_to_variant(data);
+
+	if (g_dbus_connection_emit_signal(
+		connection,
+		id,
+		"/org/tizen/NetNfcService/Hce",
+		"org.tizen.NetNfcService.Hce",
+		"EventReceived",
+		g_variant_new("(uu@a(y))",
+			GPOINTER_TO_UINT(handle),
+			event,
+			arg_data),
+		&error) == false) {
+		if (error != NULL && error->message != NULL) {
+			DEBUG_ERR_MSG("g_dbus_connection_emit_signal failed : %s", error->message);
+		} else {
+			DEBUG_ERR_MSG("g_dbus_connection_emit_signal failed");
+		}
+	}
+}
+
 static void _hce_default_listener_cb(net_nfc_target_handle_s *handle,
 	int event, data_s *data, void *user_data)
 {
-	const char *id = (const char *)user_data;
+	hce_client_context_s *context = (hce_client_context_s *)user_data;
 
-	if (id == NULL) {
+	if (context == NULL) {
 		return;
 	}
 
 	switch (event) {
 	case NET_NFC_MESSAGE_ROUTING_HOST_EMU_DATA :
-		{
-//			GVariant *apdu = NULL;
-//
-//			apdu = net_nfc_util_gdbus_data_to_variant(data);
+		if (context->id != NULL) {
+			/* app is running */
+			_emit_event_received_signal(context->connection,
+				context->id, event, handle, data);
 
-			/* Launch the specific app using appsvc_set_operation */
-			/* Have to parse the apdu data to check it select AID */
-
+		} else {
+			/* launch app */
 			DEBUG_SERVER_MSG("launch apdu app!!");
-
-//			net_nfc_gdbus_hce_emit_apdu_receive(hce_skeleton, apdu,
-//				event);
-
-			/* send signal to client */
 		}
 		break;
 
@@ -261,11 +352,29 @@ static void _hce_default_listener_cb(net_nfc_target_handle_s *handle,
 	case NET_NFC_MESSAGE_ROUTING_HOST_EMU_DEACTIVATED :
 		DEBUG_SERVER_MSG("HCE %s", event == NET_NFC_MESSAGE_ROUTING_HOST_EMU_ACTIVATED ? "ACTIVATE" : "DEACTIVATE");
 
-		/* send signal to client */
+		if (context->id != NULL) {
+			/* app is running */
+			_emit_event_received_signal(context->connection,
+				context->id, event, handle, data);
+		}
 		break;
 
 	default :
 		break;
+	}
+}
+
+static void _hce_user_data_destroy_cb(void *user_data)
+{
+	hce_client_context_s *context = user_data;
+
+	if (context != NULL) {
+		g_object_unref(context->connection);
+		if (context->id != NULL) {
+			g_free(context->id);
+		}
+
+		g_free(context);
 	}
 }
 
@@ -288,8 +397,18 @@ static void hce_start_hce_handler_thread_func(gpointer user_data)
 	pid = net_nfc_server_gdbus_get_pid(id);
 
 	if (net_nfc_util_get_pkgid_by_pid(pid, package, sizeof(package)) == true) {
+		hce_client_context_s *context;
+		GDBusConnection *connection;
+
+		connection = g_dbus_method_invocation_get_connection(data->invocation);
+
+		context = g_new0(hce_client_context_s, 1);
+		context->connection = g_object_ref(connection);
+		context->id = g_strdup(id);
+
 		result = net_nfc_server_hce_start_hce_handler(package, id,
-			_hce_default_listener_cb, NULL);
+			_hce_default_listener_cb, _hce_user_data_destroy_cb,
+			context);
 	} else {
 		DEBUG_ERR_MSG("net_nfc_util_get_pkgid_by_pid failed, pid [%d]", pid);
 
@@ -620,7 +739,7 @@ static bool __extract_parameter(apdu_header_t *apdu, size_t len, uint16_t *lc,
 	return result;
 }
 
-static void _route_table_iter_cb(hce_listener_t *data, void *user_data)
+static bool _route_table_iter_cb(hce_listener_t *data, void *user_data)
 {
 	ServerHceData *detail = (ServerHceData *)user_data;
 
@@ -628,6 +747,8 @@ static void _route_table_iter_cb(hce_listener_t *data, void *user_data)
 		data->listener(detail->handle, detail->event, NULL,
 			data->user_data);
 	}
+
+	return true;
 }
 
 static bool __pre_process_apdu(net_nfc_target_handle_s *handle, data_s *cmd)
@@ -736,18 +857,18 @@ static void hce_apdu_thread_func(gpointer user_data)
 							listener->user_data);
 					}
 				} else {
-					DEBUG_ERR_MSG("?????");
-
 					uint8_t temp[] = { 0x69, 0x00 };
 					data_s resp = { temp, sizeof(temp) };
+
+					DEBUG_ERR_MSG("?????");
 
 					net_nfc_server_hce_send_apdu_response(data->handle, &resp);
 				}
 			} else {
-				DEBUG_ERR_MSG("no aid selected");
-
 				uint8_t temp[] = { 0x69, 0x00 };
 				data_s resp = { temp, sizeof(temp) };
+
+				DEBUG_ERR_MSG("no aid selected");
 
 				net_nfc_server_hce_send_apdu_response(data->handle, &resp);
 			}
@@ -828,6 +949,10 @@ void net_nfc_server_hce_apdu_received(void *hce_event)
 	_net_nfc_util_free_mem(hce_event);
 }
 
+static void _hce_on_client_detached_cb(net_nfc_client_context_info_t *info)
+{
+	_routing_table_del_by_id(info->id);
+}
 
 gboolean net_nfc_server_hce_init(GDBusConnection *connection)
 {
@@ -860,18 +985,20 @@ gboolean net_nfc_server_hce_init(GDBusConnection *connection)
 		"/org/tizen/NetNfcService/Hce",
 		&error);
 
-	if (result == FALSE)
-	{
+	if (result == TRUE) {
+		/*TODO : Make the Routing Table for AID!*/
+		/*TODO : Do i have to make other file for routing table?????*/
+		_routing_table_init();
+
+		net_nfc_server_gdbus_register_on_client_detached_cb(
+			_hce_on_client_detached_cb);
+	} else {
 		DEBUG_ERR_MSG("can not skeleton_export %s", error->message);
 
 		g_error_free(error);
 
 		net_nfc_server_hce_deinit();
 	}
-
-	/*TODO : Make the Routing Table for AID!*/
-	/*TODO : Do i have to make other file for routing table?????*/
-	_routing_table_init();
 
 	return result;
 }
@@ -880,6 +1007,9 @@ void net_nfc_server_hce_deinit(void)
 {
 	if (hce_skeleton)
 	{
+		net_nfc_server_gdbus_unregister_on_client_detached_cb(
+			_hce_on_client_detached_cb);
+
 		g_object_unref(hce_skeleton);
 		hce_skeleton = NULL;
 	}
